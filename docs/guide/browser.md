@@ -1,6 +1,8 @@
 # The agent's browser
 
-For Docker permissions, first installation, lifecycle controls and profile cleanup, follow [Docker add-ons](/guide/add-ons).
+::: tip Docker installation
+See [Docker add-ons](/guide/add-ons) for installation, controls and profile cleanup.
+:::
 
 Optional. Nothing here is installed, pulled or shown unless you ask for it.
 

@@ -34,7 +34,12 @@ running on the same machine at `localhost`.
 
 ## Installing add-ons
 
-For Settings-based Browser and Voice installation, keep the Docker socket mount and host networking. Voice also needs host NVIDIA Container Toolkit support. Follow [Docker add-ons](/guide/add-ons) for exact prerequisites, installation, controls, model storage and cleanup steps.
+To install Browser or Voice from Settings:
+
+- Keep the **Docker socket mount** and **host networking**.
+- For Voice, configure **NVIDIA Container Toolkit** on the host.
+
+Follow [Docker add-ons](/guide/add-ons) for installation, controls, storage and cleanup.
 
 ## Updating
 
