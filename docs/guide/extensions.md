@@ -1,5 +1,7 @@
 # Extensions
 
+Looking for Browser or Voice installation? Those are [Docker add-ons](/guide/add-ons), managed under Settings → Add-ons.
+
 Extensions are pi's own package system, not something the portal invented.
 Anything you install is available to every session, and its slash commands
 appear in the palette.

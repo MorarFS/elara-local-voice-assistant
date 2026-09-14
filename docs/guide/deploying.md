@@ -32,6 +32,10 @@ The portal listens on `:4100`. Compose uses `network_mode: host`, so it binds
 that port directly on the host — which is also what lets pi reach a llama-server
 running on the same machine at `localhost`.
 
+## Installing add-ons
+
+For Settings-based Browser and Voice installation, keep the Docker socket mount and host networking. Voice also needs host NVIDIA Container Toolkit support. Follow [Docker add-ons](/guide/add-ons) for exact prerequisites, installation, controls, model storage and cleanup steps.
+
 ## Updating
 
 ```bash
@@ -48,7 +52,7 @@ rebuild.
 | --- | --- |
 | `/data` | Everything stateful — see below |
 | `/workspaces` | The directories pi works in, mounted from `WORKSPACES_DIR` |
-| `/var/run/docker.sock` | Only needed when `EXECUTOR=container` |
+| `/var/run/docker.sock` | Managed Browser/Voice add-ons and `EXECUTOR=container` |
 
 Inside `/data`:
 

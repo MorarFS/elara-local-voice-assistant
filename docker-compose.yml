@@ -10,7 +10,7 @@ services:
       - ${PORTAL_TLS_DIR:-/dev/null}:/certs:ro
       # Workspaces pi works in. Read-write: the whole point is that it edits code.
       - ${WORKSPACES_DIR:-/root/repos}:/workspaces
-      # Only needed when EXECUTOR=container.
+      # Required for managed Browser/Voice add-ons and EXECUTOR=container.
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       # With host networking the portal binds PORT directly on the host.

@@ -1,5 +1,7 @@
 # Voice control
 
+For the current managed Docker installation, follow [Docker add-ons](/guide/add-ons). It covers socket/GPU prerequisites, automatic Q8 setup, exact endpoints, lazy loading, restart and removal. The manual Compose and Cortex-specific services below are alternative/historical deployments; do not start them alongside the managed installer.
+
 Use **Settings → Add-ons → Voice → Install voice** for automatic setup on a Linux NVIDIA Docker host. It downloads the model, quantizes Breeze to Q8, and connects the services. See [automatic setup](#automatic-setup-from-settings) below.
 
 Enable **Voice** under **Settings → Add-ons** to talk to any open session.
@@ -49,7 +51,7 @@ an already accepted agent task. Existing transcript history is never read aloud
 on activation. Status text shows listening, speech detection, transcription,
 and playback; errors remain visible in the voice screen.
 
-## Services on the portal's GPU host
+## Alternative: manually managed Python services
 
 The optional Compose overlay starts Whisper.cpp and the official Breeze runtime
 on the same Linux host. Install Docker Compose with GPU support and NVIDIA
@@ -187,7 +189,7 @@ model inference or microphone hardware.
 Runtime references: [Breeze](https://github.com/breezeblue-ai/breeze-tts),
 [Whisper.cpp server](https://github.com/ggml-org/whisper.cpp/tree/master/examples/server).
 
-## Cortex native services
+## Historical Cortex native services
 
 Cortex already has Breeze's source, Python environment and weights under
 `/root/breeze`. The units in `deploy/cortex-voice` reuse that installation.
@@ -207,7 +209,7 @@ they use the same ports.
 Browser tests use the public JFK speech sample bundled with Whisper.cpp as a
 synthetic microphone stream; they do not record from your physical microphone.
 
-## Cortex accelerated streaming runtime
+## Historical Cortex accelerated streaming runtime
 
 Cortex uses audio.cpp at commit `efb04233dab73aeee4b2912042a90e7b36329061`,
 built for CUDA architecture 86 with the `breeze_tts` model. The Q8 package is

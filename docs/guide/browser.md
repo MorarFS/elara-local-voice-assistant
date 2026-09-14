@@ -1,5 +1,7 @@
 # The agent's browser
 
+For Docker permissions, first installation, lifecycle controls and profile cleanup, follow [Docker add-ons](/guide/add-ons).
+
 Optional. Nothing here is installed, pulled or shown unless you ask for it.
 
 A real browser, in its own container, with a profile that stays signed in. You
