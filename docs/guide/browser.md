@@ -1,5 +1,9 @@
 # The agent's browser
 
+::: tip Docker installation
+See [Docker add-ons](/guide/add-ons) for installation, controls and profile cleanup.
+:::
+
 Optional. Nothing here is installed, pulled or shown unless you ask for it.
 
 A real browser, in its own container, with a profile that stays signed in. You

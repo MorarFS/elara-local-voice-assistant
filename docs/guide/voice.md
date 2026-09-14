@@ -1,6 +1,14 @@
 # Voice control
 
-Use **Settings → Add-ons → Voice → Install voice** for automatic setup on a Linux NVIDIA Docker host. It downloads the model, quantizes Breeze to Q8, and connects the services. See [automatic setup](#automatic-setup-from-settings) below.
+::: tip Install Voice with Docker
+Open **Settings → Add-ons → Voice → Install voice**.
+
+The [Docker add-ons guide](/guide/add-ons) covers GPU prerequisites, automatic Q8 setup, service controls and cleanup.
+:::
+
+::: info Already installed?
+Start with the controls below. Manual Compose and historical Cortex services are alternative deployments; do not run them alongside the managed installer.
+:::
 
 Enable **Voice** under **Settings → Add-ons** to talk to any open session.
 Click the **microphone icon** beside Send once, then speak naturally. The browser
@@ -49,8 +57,9 @@ an already accepted agent task. Existing transcript history is never read aloud
 on activation. Status text shows listening, speech detection, transcription,
 and playback; errors remain visible in the voice screen.
 
-## Services on the portal's GPU host
+## Alternative: manually managed Python services
 
+::: details Show alternative deployment details
 The optional Compose overlay starts Whisper.cpp and the official Breeze runtime
 on the same Linux host. Install Docker Compose with GPU support and NVIDIA
 Container Toolkit first. Breeze recommends at least 12 GB GPU memory for eager
@@ -105,6 +114,7 @@ Choose **Designed voice** to generate a voice without a reference.
 **Describe the speaking voice** controls delivery in either mode. Breeze supports English and Chinese speech.
 Model weights and self-hosted outputs have a research/non-commercial license;
 see the [model card](https://huggingface.co/BreezeBlue/Breeze-TTS-2).
+:::
 
 ## First spoken response
 
@@ -145,21 +155,35 @@ languages.
 
 Audio is not stored by the portal. The browser encodes detected speech
 as mono 16 kHz WAV for Whisper. Browser playback receives Breeze’s 24 kHz PCM
-stream; clients that do not request PCM still receive a buffered WAV. Long responses are split into chunks of at most 600 characters and
+stream; clients that do not request PCM still receive a buffered WAV.
+
+Long responses are split into chunks of at most 600 characters and
 played sequentially. Fragments under 20 spoken characters are grouped with the
 next phrase; a final short reply is always flushed. Complete sentences and bounded phrases are queued as the
 assistant text arrives, without waiting for the full reply. The portal forwards
 Breeze’s PCM stream. The browser buffers each spoken sentence or bounded phrase
-before playing it as one continuous buffer. This avoids interruptions within
+before playing it as one continuous buffer.
+
+This avoids interruptions within
 words when Breeze generates slower than playback. The full text response does
-not need to finish. Text, synthesis and playback have independent queues: Breeze
+not need to finish.
+
+Text, synthesis and playback have independent queues: Breeze
 generates the next phrase while the current one plays, and newly arriving text
 joins the synthesis queue immediately. One synthesis request runs at a time, with
-at most two completed phrases waiting for playback. Barge-in and End cancel all
-three queues; Mute leaves output running. Voice prompt submission returns at SDK
-acceptance so the HTTP request does not hold playback until model completion. Pauses can still occur when synthesis
+at most two completed phrases waiting for playback.
+
+Barge-in and End cancel all
+three queues; Mute leaves output running.
+
+Voice prompt submission returns at SDK
+acceptance so the HTTP request does not hold playback until model completion.
+
+Pauses can still occur when synthesis
 is slower than playback. Barge-in cancels both queued audio and the upstream request.
-The first sentence still needs model synthesis time before audio is available. Code blocks are
+The first sentence still needs model synthesis time before audio is available.
+
+Code blocks are
 replaced with a short spoken notice. Thinking and tool output are not spoken.
 
 If transcription or sending fails, the error appears beside the controls; a
@@ -187,8 +211,9 @@ model inference or microphone hardware.
 Runtime references: [Breeze](https://github.com/breezeblue-ai/breeze-tts),
 [Whisper.cpp server](https://github.com/ggml-org/whisper.cpp/tree/master/examples/server).
 
-## Cortex native services
+## Historical Cortex native services
 
+::: details Show alternative deployment details
 Cortex already has Breeze's source, Python environment and weights under
 `/root/breeze`. The units in `deploy/cortex-voice` reuse that installation.
 Whisper is built without CUDA under `/opt/pithagoras/voice-runtime/whisper.cpp`
@@ -206,9 +231,11 @@ they use the same ports.
 
 Browser tests use the public JFK speech sample bundled with Whisper.cpp as a
 synthetic microphone stream; they do not record from your physical microphone.
+:::
 
-## Cortex accelerated streaming runtime
+## Historical Cortex accelerated streaming runtime
 
+::: details Show alternative deployment details
 Cortex uses audio.cpp at commit `efb04233dab73aeee4b2912042a90e7b36329061`,
 built for CUDA architecture 86 with the `breeze_tts` model. The Q8 package is
 `breeze_tts_2_q8_0`, installed under `/root/breeze/audio-cpp-models`.
@@ -231,7 +258,7 @@ of audio in 4.94 seconds, with first bytes at 0.99 seconds.
 Rollback: stop `pithagoras-audio-cpp`, start `pithagoras-breeze`, select runtime
 `breeze`, and restore the speech URL to port 7860. Only one TTS unit should be
 enabled at boot. Qwen and Whisper do not need to restart.
-
+:::
 
 ## Session prefill snapshots on Cortex
 
