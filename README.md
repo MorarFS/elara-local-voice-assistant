@@ -33,7 +33,7 @@ cd elara-local-voice-assistant
 ./install-mac.sh
 ```
 
-The installer uses `~/Library/Application Support/Elara`, installs an isolated Node.js runtime, builds Whisper with Metal support, downloads the Whisper and Kokoro models, builds the web app, and creates a private local password. It does not copy model weights or credentials into the repository.
+The installer uses `~/Library/Application Support/Elara`, installs an isolated Node.js runtime, builds Whisper with Metal support, downloads the Whisper and Kokoro models, builds the web app, and creates the local runtime configuration. It does not copy model weights or credentials into the repository.
 
 To use a different model:
 
@@ -53,7 +53,7 @@ See [INSTALL.md](INSTALL.md) for the full install, run, update, and troubleshoot
 elara
 ```
 
-The command starts the local model, speech services, browser, and portal, copies the private login password to the clipboard, and opens the saved Elara chat in a dedicated Chrome app window.
+The command starts the local model, speech services, browser, and portal, opens the saved Elara chat in a dedicated Chrome app window.
 
 Other commands:
 

@@ -43,9 +43,7 @@ Run this from any directory:
 elara
 ```
 
-Elara opens in its own Chrome app window. The window behaves like a normal Mac app window and can be minimized. The password is copied to the clipboard on launch. Paste it if the login screen appears.
-
-Use these maintenance commands:
+Elara opens in its own Chrome app window. The window behaves like a normal Mac app window and can be minimized. Use these maintenance commands:
 
 ```sh
 elara status

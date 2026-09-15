@@ -108,9 +108,13 @@ jq -n --arg node "$ELARA_HOME/runtime/node/bin/node" --arg cli "$ELARA_HOME/runt
 
 step "Creating Elara's local configuration"
 if [[ ! -f "$ELARA_HOME/config/secrets.json" ]]; then
-  jq -n --arg password "$(openssl rand -hex 8)" --arg secret "$(openssl rand -hex 32)" '{portal_password:$password,portal_secret:$secret}' > "$ELARA_HOME/config/secrets.json"
+  jq -n --arg secret "$(openssl rand -hex 32)" '{portal_secret:$secret}' > "$ELARA_HOME/config/secrets.json"
   chmod 600 "$ELARA_HOME/config/secrets.json"
 fi
+tmp_secrets="$(mktemp)"
+jq 'del(.portal_password)' "$ELARA_HOME/config/secrets.json" > "$tmp_secrets"
+mv "$tmp_secrets" "$ELARA_HOME/config/secrets.json"
+chmod 600 "$ELARA_HOME/config/secrets.json"
 if [[ ! -f "$ELARA_HOME/config/assistant.json" ]]; then
   jq -n --arg model "$MODEL" '{model:$model,context_length:32768,speech_instruction:"A warm, natural English voice with clear articulation, relaxed conversational pacing, gentle expression, and smooth sentence endings. Speak with quiet confidence, without sounding theatrical or hurried.",cfg_scale:4,provider:"omlx",speech_runtime:"kokoro",kokoro_voice:"af_heart"}' > "$ELARA_HOME/config/assistant.json"
 else
@@ -125,10 +129,7 @@ install -m 755 "$SCRIPT_DIR/deploy/macos/elara" "$HOME/.local/bin/elara"
 step "Starting Elara and creating its chat"
 /usr/bin/python3 "$ELARA_HOME/assistant.py" start
 if [[ "$(jq -r '.session_id // empty' "$ELARA_HOME/config/assistant.json")" == "" ]]; then
-  cookie="$(mktemp)"
-  password="$(jq -r '.portal_password' "$ELARA_HOME/config/secrets.json")"
-  curl -fsS -c "$cookie" -H 'Content-Type: application/json' -d "$(jq -n --arg password "$password" '{password:$password}')" http://127.0.0.1:4100/api/auth/login >/dev/null
-  session="$(curl -fsS -b "$cookie" -H 'Content-Type: application/json' -d "$(jq -n --arg title 'Elara' --arg workspace "$ELARA_HOME/workspaces/default" '{title:$title,workspace:$workspace}')" http://127.0.0.1:4100/api/sessions | jq -r '.id')"
+  session="$(curl -fsS -H 'Content-Type: application/json' -d "$(jq -n --arg title 'Elara' --arg workspace "$ELARA_HOME/workspaces/default" '{title:$title,workspace:$workspace}')" http://127.0.0.1:4100/api/sessions | jq -r '.id')"
   [[ -n "$session" && "$session" != "null" ]] || fail "Elara started, but its first chat could not be created."
   tmp_config="$(mktemp)"
   jq --arg id "$session" '.session_id=$id' "$ELARA_HOME/config/assistant.json" > "$tmp_config"
@@ -139,4 +140,3 @@ printf '\nElara is installed. Run:\n\n  elara\n\n'
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
   printf 'Add this line to ~/.zprofile, then open a new terminal:\n\n  export PATH="$HOME/.local/bin:$PATH"\n\n'
 fi
-printf 'The first launch copies the private login password to your clipboard.\n'

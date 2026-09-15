@@ -21,7 +21,7 @@ def environment():
     env.update({
         'PATH': str(ROOT / 'runtime/node/bin') + ':' + str(APP / 'node_modules/.bin') + ':/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:' + str(Path.home() / '.local/bin'),
         'PORT': '4100', 'PORTAL_HOST': '127.0.0.1', 'NODE_ENV': 'production',
-        'PORTAL_PASSWORD': secrets['portal_password'], 'PORTAL_SECRET': secrets['portal_secret'],
+        'PORTAL_SECRET': secrets['portal_secret'],
         'DATA_DIR': str(ROOT / 'data'), 'SESSION_DIR': str(ROOT / 'data/sessions'),
         'WORKSPACE_ROOT': str(ROOT / 'workspaces'), 'AGENT_HOME': str(ROOT / 'workspaces'),
         'BIN_DIR': str(ROOT / 'runtime'), 'CHANNELS_DIR': str(ROOT / 'data/channels'),
@@ -117,12 +117,10 @@ def start_voice():
 
 def portal_client():
     opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
-    password = json.loads((ROOT / 'config/secrets.json').read_text())['portal_password']
     def api(path, data=None, method=None):
         request = urllib.request.Request(PORTAL + path, data=None if data is None else json.dumps(data).encode(), headers={'Content-Type': 'application/json'}, method=method)
         with opener.open(request, timeout=120) as response:
             return json.load(response)
-    api('/api/auth/login', {'password': password})
     return api
 
 def initialize():
@@ -130,7 +128,7 @@ def initialize():
     current = api('/api/voice')
     if not current.get('enabled'):
         cfg = read_config()
-        api('/api/voice', {'enabled': True, 'whisperUrl': 'http://127.0.0.1:8188/inference', 'breezeUrl': 'http://127.0.0.1:7863/v1/audio/speech', 'runtime': 'kokoro', 'kokoroVoice': 'af_heart', 'speechRate': 1, 'voice': 'design', 'language': 'auto', 'instruction': cfg['speech_instruction'], 'cfgScale': cfg['cfg_scale'], 'lazyLoad': True, 'vad': {'positiveSpeechThreshold': 0.65, 'negativeSpeechThreshold': 0.35, 'minSpeechMs': 256, 'preSpeechPadMs': 320, 'redemptionMs': 750}}, method='PUT')
+        api('/api/voice', {'enabled': True, 'whisperUrl': 'http://127.0.0.1:8188/inference', 'breezeUrl': 'http://127.0.0.1:7863/v1/audio/speech', 'runtime': 'kokoro', 'kokoroVoice': 'af_heart', 'speechRate': 1, 'voice': 'design', 'language': 'en', 'instruction': cfg['speech_instruction'], 'cfgScale': cfg['cfg_scale'], 'lazyLoad': True, 'vad': {'positiveSpeechThreshold': 0.45, 'negativeSpeechThreshold': 0.25, 'minSpeechMs': 128, 'preSpeechPadMs': 480, 'redemptionMs': 1000}}, method='PUT')
     browser = api('/api/browser')
     if not browser.get('running'):
         api('/api/browser/start', {})
@@ -186,14 +184,12 @@ def main():
         fcntl.flock(lock, fcntl.LOCK_EX)
         if args.action in ('start', 'open'):
             start()
-            print('Elara is ready at http://localhost:4100')
+            print('Elara is ready at ' + PORTAL)
             if args.action == 'open':
                 stop_ui()
-                password = json.loads((ROOT / 'config/secrets.json').read_text())['portal_password']
-                subprocess.run(['/usr/bin/pbcopy'], input=password.encode(), check=True)
-                print('Login password copied. Paste it if prompted; then open a conversation and click the microphone.')
+                print('Open a conversation and click the microphone, or type in the chat box.')
                 session_id = read_config().get('session_id')
-                app_url = 'http://localhost:4100' + (('/s/' + session_id) if session_id else '/')
+                app_url = PORTAL + (('/s/' + session_id) if session_id else '/')
                 subprocess.run(['/usr/bin/open', '-na', 'Google Chrome', '--args', '--app=' + app_url, '--user-data-dir=' + str(ROOT / 'data/elara-ui-profile'), '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required'], check=True)
         elif args.action == 'start-voice':
             start_voice()

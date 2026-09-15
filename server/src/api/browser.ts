@@ -152,7 +152,7 @@ export function browserRouter(): Router {
       running: Boolean(version),
       // An unauthenticated browser holding live logins is the worst outcome
       // here, and nothing else would tell you: the UI simply opens.
-      unprotected: Boolean(version) && !service.config().password,
+      unprotected: Boolean(version) && !service.config().password && process.env.BROWSER_NATIVE_UI !== "true",
       version,
       pages,
       uiPort: uiPort(),
