@@ -87,6 +87,19 @@ def stop_process(name):
 def stop_ui():
     marker = '--user-data-dir=' + str(ROOT / 'data/elara-ui-profile')
     subprocess.run(['/usr/bin/pkill', '-f', '--', marker], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if subprocess.run(['/usr/bin/pgrep', '-x', 'Google Chrome'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+        script = '''tell application "Google Chrome"
+repeat with w in windows
+repeat with i from (count tabs of w) to 1 by -1
+set u to ""
+try
+set u to URL of tab i of w
+end try
+if u starts with "http://localhost:4100" or u starts with "http://127.0.0.1:4100" then close tab i of w
+end repeat
+end repeat
+end tell'''
+        subprocess.run(['/usr/bin/osascript', '-e', script], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 def start_voice():
     start_process('kokoro', [str(NODE), str(ROOT / 'runtime/kokoro/server.mjs')], str(ROOT / 'runtime/kokoro/server.mjs'), 'http://127.0.0.1:7863/health')
@@ -95,7 +108,11 @@ def start_voice():
         if not (ROOT / file).is_file():
             raise RuntimeError('Installation is incomplete: ' + file)
     start_process('whisper', [str(ROOT / 'runtime/whisper-server'), '--host', '127.0.0.1', '--port', '8188', '--model', str(ROOT / 'models/ggml-small.bin'), '--language', 'auto', '--threads', '4'], str(ROOT / 'runtime/whisper-server'), 'http://127.0.0.1:8188/health')
-    if (ROOT / 'runtime/audiocpp_server').is_file() and (ROOT / 'models/breeze-tts-2-q8_0.gguf').is_file():
+    if read_config().get('speech_runtime') == 'audio-cpp':
+        required = ['runtime/audiocpp_server', 'models/breeze-tts-2-q8_0.gguf', 'config/audio-cpp.json']
+        for file in required:
+            if not (ROOT / file).is_file():
+                raise RuntimeError('Breeze is selected but missing: ' + file)
         start_process('speech', [str(ROOT / 'runtime/audiocpp_server'), '--config', str(ROOT / 'config/audio-cpp.json')], str(ROOT / 'runtime/audiocpp_server'), 'http://127.0.0.1:7862/health')
 
 def portal_client():
@@ -177,7 +194,7 @@ def main():
                 print('Login password copied. Paste it if prompted; then open a conversation and click the microphone.')
                 session_id = read_config().get('session_id')
                 app_url = 'http://localhost:4100' + (('/s/' + session_id) if session_id else '/')
-                subprocess.run(['/usr/bin/open', '-na', 'Google Chrome', '--args', '--app=' + app_url, '--user-data-dir=' + str(ROOT / 'data/elara-ui-profile'), '--no-first-run', '--no-default-browser-check'], check=True)
+                subprocess.run(['/usr/bin/open', '-na', 'Google Chrome', '--args', '--app=' + app_url, '--user-data-dir=' + str(ROOT / 'data/elara-ui-profile'), '--no-first-run', '--no-default-browser-check', '--autoplay-policy=no-user-gesture-required'], check=True)
         elif args.action == 'start-voice':
             start_voice()
         elif args.action == 'stop-voice':
