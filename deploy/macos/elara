@@ -16,13 +16,15 @@ case "$action" in
   start) exec /usr/bin/python3 "$controller" start ;;
   stop) exec /usr/bin/python3 "$controller" stop ;;
   status) exec /usr/bin/python3 "$controller" status ;;
+  models) exec /usr/bin/python3 "$controller" models ;;
+  model) exec /usr/bin/python3 "$controller" model "${2:-}" ;;
   restart)
     /usr/bin/python3 "$controller" stop || exit $?
     exec /usr/bin/python3 "$controller" open
     ;;
   help|-h|--help)
     printf '%s\n' \
-      'Usage: elara [open|start|stop|status|restart|help]' \
+      'Usage: elara [open|start|stop|status|restart|models|model NAME|help]' \
       '' \
       'With no argument, Elara starts and opens in a minimizable app window.'
     ;;

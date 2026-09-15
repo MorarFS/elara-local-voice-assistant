@@ -8,6 +8,7 @@ APP = ROOT / 'app'
 NODE = ROOT / 'runtime/node/bin/node'
 LMS = Path.home() / '.lmstudio/bin/lms'
 PORTAL = 'http://127.0.0.1:4100'
+CONTEXT_CAP = 96000
 
 def read_config():
     return json.loads((ROOT / 'config/assistant.json').read_text())
@@ -44,6 +45,94 @@ def reachable(url):
             return response.status == 200
     except Exception:
         return False
+
+def write_json(path, value):
+    temporary = path.with_suffix(path.suffix + '.tmp')
+    temporary.write_text(json.dumps(value, indent=2) + '\n')
+    temporary.replace(path)
+
+def omlx_models():
+    if not reachable('http://127.0.0.1:8000/health'):
+        subprocess.run(['/usr/bin/open', '-a', 'oMLX'], check=True)
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and not reachable('http://127.0.0.1:8000/health'):
+            time.sleep(0.5)
+    key = json.loads((Path.home() / '.omlx/settings.json').read_text())['auth']['api_key']
+    request = urllib.request.Request('http://127.0.0.1:8000/v1/models/status', headers={'Authorization': 'Bearer ' + key})
+    with urllib.request.urlopen(request, timeout=10) as response:
+        return json.load(response)['models']
+
+def model_context(model):
+    native = model.get('max_context_window') or model.get('model_context_length') or 32768
+    return min(CONTEXT_CAP, int(native))
+
+def sync_model_catalog(models):
+    selected = read_config()['model']
+    path = ROOT / 'agent/models.json'
+    data = json.loads(path.read_text())
+    provider = data['providers']['omlx']
+    previous = {model['id']: model for model in provider.get('models', [])}
+    catalogue = []
+    for model in models:
+        if model.get('is_helper') or not model.get('id'):
+            continue
+        model_id = model['id']
+        context = model_context(model)
+        old = previous.get(model_id, {})
+        qwen = 'qwen' in model_id.lower()
+        catalogue.append({
+            'id': model_id,
+            'name': old.get('name', model_id),
+            'reasoning': qwen,
+            'input': ['text', 'image'] if model.get('engine_type') == 'vlm' else ['text'],
+            'contextWindow': context,
+            'maxTokens': min(8192, max(2048, context // 4)),
+            'cost': {'input': 0, 'output': 0, 'cacheRead': 0, 'cacheWrite': 0},
+        })
+    if not any(model['id'] == selected for model in catalogue):
+        raise RuntimeError('The configured model is not registered in oMLX')
+    provider['models'] = catalogue
+    write_json(path, data)
+    settings_path = ROOT / 'agent/settings.json'
+    settings = json.loads(settings_path.read_text())
+    settings['defaultProvider'] = 'omlx'
+    settings['defaultModel'] = selected
+    settings['compaction'] = {'enabled': True, 'reserveTokens': 8192, 'keepRecentTokens': 24000}
+    write_json(settings_path, settings)
+
+def choose_model(name):
+    models = omlx_models()
+    available = [model for model in models if model.get('id') and not model.get('is_helper')]
+    if not name:
+        current = read_config()['model']
+        print('Current: ' + current)
+        for model in available:
+            marker = '*' if model['id'] == current else ' '
+            loaded = ' loaded' if model.get('loaded') else ''
+            print(f"{marker} {model['id']}  ({model_context(model):,} context{loaded})")
+        return
+    selected = next((model for model in available if model['id'] == name), None)
+    if selected is None:
+        matches = [model for model in available if name.lower() in model['id'].lower()]
+        if len(matches) == 1:
+            selected = matches[0]
+        else:
+            raise RuntimeError('Choose an exact model name from: ' + ', '.join(model['id'] for model in available))
+    config_path = ROOT / 'config/assistant.json'
+    config = json.loads(config_path.read_text())
+    config['model'] = selected['id']
+    config['context_length'] = model_context(selected)
+    write_json(config_path, config)
+    sync_model_catalog(models)
+    ensure_model()
+    if reachable(PORTAL + '/api/auth/status'):
+        stop_process('portal')
+        start_process('portal', [str(NODE), str(APP / 'server/dist/index.js')], str(APP / 'server/dist/index.js'), PORTAL + '/api/auth/status')
+        initialize()
+        session_id = read_config().get('session_id')
+        if session_id:
+            portal_client()('/api/sessions/' + session_id + '/config', {'provider': 'omlx', 'modelId': selected['id']})
+    print(f"Elara now uses {selected['id']} with {model_context(selected):,} tokens of context.")
 
 def process_alive(name):
     record = ROOT / 'data' / (name + '.pid.json')
@@ -137,16 +226,10 @@ def initialize():
 
 def ensure_model():
     if read_config().get('provider') == 'omlx':
-        if not reachable('http://127.0.0.1:8000/health'):
-            subprocess.run(['/usr/bin/open', '-a', 'oMLX'], check=True)
-            deadline = time.monotonic() + 60
-            while time.monotonic() < deadline and not reachable('http://127.0.0.1:8000/health'):
-                time.sleep(0.5)
+        models = omlx_models()
+        sync_model_catalog(models)
         key = json.loads((Path.home() / '.omlx/settings.json').read_text())['auth']['api_key']
         headers = {'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json'}
-        request = urllib.request.Request('http://127.0.0.1:8000/v1/models/status', headers=headers)
-        with urllib.request.urlopen(request, timeout=10) as response:
-            models = json.load(response)['models']
         selected = next((m for m in models if m['id'] == read_config()['model']), None)
         if selected is None:
             raise RuntimeError('The configured model is not registered in oMLX')
@@ -176,13 +259,16 @@ def start():
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', choices=['start', 'open', 'stop', 'status', 'start-voice', 'stop-voice'])
+    parser.add_argument('action', choices=['start', 'open', 'stop', 'status', 'models', 'model', 'start-voice', 'stop-voice'])
+    parser.add_argument('value', nargs='?')
     args = parser.parse_args()
     # Separate locks: portal initialization can call voice service actions.
     lockname = 'voice' if args.action.endswith('-voice') else 'assistant'
     with (ROOT / 'data' / (lockname + '.lock')).open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
-        if args.action in ('start', 'open'):
+        if args.action in ('models', 'model'):
+            choose_model(args.value)
+        elif args.action in ('start', 'open'):
             start()
             print('Elara is ready at ' + PORTAL)
             if args.action == 'open':

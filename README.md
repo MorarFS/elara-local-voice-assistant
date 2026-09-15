@@ -9,6 +9,8 @@ The default configuration uses `Qwen3.6-35B-A3B-4bit`. Its mixture of experts de
 - Fully local chat, speech recognition, and spoken replies
 - High quality Kokoro `af_heart` speech at 24 kHz, generated in full precision on the CPU
 - Whisper Small with Metal acceleration and automatic language detection
+- A 96,000-token context window for models that support it
+- Automatic discovery of locally registered oMLX models
 - One terminal command: `elara`
 - A normal macOS window that can be minimized
 - A text box and hands free microphone mode in the same conversation
@@ -62,10 +64,12 @@ elara start    # start without opening the window
 elara stop     # stop Elara and close its app window
 elara restart  # stop old instances, then open one clean instance
 elara status   # show local service health
+elara models   # list local oMLX models and context limits
+elara model NAME  # switch the current and default model
 elara help
 ```
 
-Type in the composer for text chat. Click the microphone for hands free conversation. The first microphone use may trigger a macOS permission prompt for Google Chrome.
+Type in the composer for text chat. Click the microphone for hands free conversation. Click the model name below the composer to choose from every model registered in oMLX, or use `elara model NAME` in Terminal. The first microphone use may trigger a macOS permission prompt for Google Chrome.
 
 ## Local architecture
 

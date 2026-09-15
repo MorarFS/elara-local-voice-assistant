@@ -102,8 +102,8 @@ mkdir -p "$ELARA_HOME/agent/npm"
 rsync -a --delete "$SCRIPT_DIR/deploy/macos/agent-npm/" "$ELARA_HOME/agent/npm/"
 cd "$ELARA_HOME/agent/npm"
 npm ci --omit=dev
-jq -n --arg model "$MODEL" '{defaultProvider:"omlx",defaultModel:$model,defaultThinkingLevel:"off",compaction:{enabled:true,reserveTokens:8192,keepRecentTokens:8000},packages:["npm:pi-mcp-adapter"]}' > "$ELARA_HOME/agent/settings.json"
-jq -n --arg model "$MODEL" '{providers:{omlx:{baseUrl:"http://127.0.0.1:8000/v1",api:"openai-completions",apiKey:"$OMLX_API_KEY",compat:{supportsStore:false,supportsDeveloperRole:false,supportsReasoningEffort:false,maxTokensField:"max_tokens",thinkingFormat:"qwen-chat-template"},models:[{id:$model,name:($model+" · local voice"),reasoning:true,input:["text","image"],contextWindow:32768,maxTokens:8192,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}}]}}}' > "$ELARA_HOME/agent/models.json"
+jq -n --arg model "$MODEL" '{defaultProvider:"omlx",defaultModel:$model,defaultThinkingLevel:"off",compaction:{enabled:true,reserveTokens:8192,keepRecentTokens:24000},packages:["npm:pi-mcp-adapter"]}' > "$ELARA_HOME/agent/settings.json"
+jq -n --arg model "$MODEL" '{providers:{omlx:{baseUrl:"http://127.0.0.1:8000/v1",api:"openai-completions",apiKey:"$OMLX_API_KEY",compat:{supportsStore:false,supportsDeveloperRole:false,supportsReasoningEffort:false,maxTokensField:"max_tokens",thinkingFormat:"qwen-chat-template"},models:[{id:$model,name:($model+" · local voice"),reasoning:true,input:["text","image"],contextWindow:96000,maxTokens:8192,cost:{input:0,output:0,cacheRead:0,cacheWrite:0}}]}}}' > "$ELARA_HOME/agent/models.json"
 jq -n --arg node "$ELARA_HOME/runtime/node/bin/node" --arg cli "$ELARA_HOME/runtime/browser-tools/node_modules/@playwright/mcp/cli.js" '{mcpServers:{browser:{command:$node,args:[$cli,"--cdp-endpoint","http://127.0.0.1:9222","--snapshot-mode","none"],lifecycle:"lazy",directTools:["browser_navigate","browser_navigate_back","browser_snapshot","browser_find","browser_click","browser_type","browser_fill_form","browser_select_option","browser_press_key","browser_wait_for","browser_take_screenshot"],excludeTools:["browser_run_code_unsafe"]}}}' > "$ELARA_HOME/agent/mcp.json"
 
 step "Creating Elara's local configuration"
@@ -116,7 +116,7 @@ jq 'del(.portal_password)' "$ELARA_HOME/config/secrets.json" > "$tmp_secrets"
 mv "$tmp_secrets" "$ELARA_HOME/config/secrets.json"
 chmod 600 "$ELARA_HOME/config/secrets.json"
 if [[ ! -f "$ELARA_HOME/config/assistant.json" ]]; then
-  jq -n --arg model "$MODEL" '{model:$model,context_length:32768,speech_instruction:"A warm, natural English voice with clear articulation, relaxed conversational pacing, gentle expression, and smooth sentence endings. Speak with quiet confidence, without sounding theatrical or hurried.",cfg_scale:4,provider:"omlx",speech_runtime:"kokoro",kokoro_voice:"af_heart"}' > "$ELARA_HOME/config/assistant.json"
+  jq -n --arg model "$MODEL" '{model:$model,context_length:96000,speech_instruction:"A warm, natural English voice with clear articulation, relaxed conversational pacing, gentle expression, and smooth sentence endings. Speak with quiet confidence, without sounding theatrical or hurried.",cfg_scale:4,provider:"omlx",speech_runtime:"kokoro",kokoro_voice:"af_heart"}' > "$ELARA_HOME/config/assistant.json"
 else
   tmp_config="$(mktemp)"
   jq --arg model "$MODEL" '.model=$model | .provider="omlx" | .speech_runtime="kokoro" | .kokoro_voice=(.kokoro_voice // "af_heart")' "$ELARA_HOME/config/assistant.json" > "$tmp_config"

@@ -49,7 +49,11 @@ Elara opens in its own Chrome app window. The window behaves like a normal Mac a
 elara status
 elara restart
 elara stop
+elara models
+elara model Swift-Qwen3.8-27b-mlx-5Bit
 ```
+
+Elara discovers the models registered in oMLX each time it starts. Models that support at least 96,000 tokens use a 96,000-token context window. Models with a lower native limit use that limit. You can also click the current model below the chat composer to switch models in the app.
 
 Always use `elara restart` if an older voice window is still open. It closes the Elara Chrome profile and releases the microphone before starting one clean instance.
 
