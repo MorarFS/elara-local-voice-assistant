@@ -11,7 +11,9 @@
     "better-sqlite3": "^11.7.0",
     "cookie-parser": "^1.4.7",
     "express": "^5.0.1",
+    "mammoth": "1.12.3",
     "nanoid": "^5.0.9",
+    "pdfjs-dist": "6.3.289",
     "typebox": "^1.1.38"
   },
   "devDependencies": {

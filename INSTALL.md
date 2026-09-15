@@ -61,6 +61,14 @@ Always use `elara restart` if an older voice window is still open. It closes the
 
 Use the text box at the bottom of the chat for typed messages. Click the microphone to enter hands free mode. Grant microphone access to Google Chrome when macOS asks.
 
+The **Conversation** panel stays visible during voice mode, so you can read your transcribed speech and Elara's replies, or type while the microphone is active. Click **Minimize chat** to hide the panel and **Show chat** to reopen it. Your draft stays in place.
+
+Click **Attach documents** (the paperclip), or drag files into the chat panel. Wait for **Ready**, then speak your question or type it and press Enter. Shift+Enter inserts a new line. Documents are included with the next message; the remove button detaches a file before sending. Sending attachments without a question asks Elara to read them.
+
+Supported files: PDF, Word `.docx`, UTF-8 text, Markdown, CSV, JSON, YAML, and LOG. Limits: five files per message, 15 MB per file, 200 PDF pages, and 500,000 extracted characters per document. Scanned PDFs require OCR first; password-protected PDFs need to be unlocked. Extraction reads text, so images and exact page layout are not included.
+
+Originals and extracted text are stored in `.elara-documents` inside the conversation's workspace. Each prompt includes the first 12,000 characters per document and a local path for Elara's file tool to read the rest. Files remain available for follow-up questions; pending attachments that have not been sent need to be reattached after a page reload.
+
 Elara defaults to the warm American `af_heart` Kokoro voice. Change the voice in **Settings → Add-ons → Voice**. Available packaged choices include Bella, Emma, Michael, and George.
 
 ## Update

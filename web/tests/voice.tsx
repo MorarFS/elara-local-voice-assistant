@@ -19,6 +19,7 @@ function Fixture() {
   ]);
   const [running, setRunning] = useState(false);
   const [sent, setSent] = useState(0);
+  const [lastMessage, setLastMessage] = useState("");
   const [voiceSend, setVoiceSend] = useState(false);
   const [aborted, setAborted] = useState(0);
   const [options, setOptions] = useState(false);
@@ -27,6 +28,8 @@ function Fixture() {
   return <>
     <main data-testid="workspace" style={{ maxWidth: 980, height: 'calc(100vh - 96px)', minHeight: 540, margin: '16px auto 0' }}>
       <Chat session={session} events={events} onClientCommand={() => {}} onAbort={async () => { setAborted(n => n + 1); setRunning(false); }} onSend={async (message, options) => {
+        if (message.startsWith("FAIL")) throw new Error("Model is unavailable. Try again.");
+        setLastMessage(message);
         setVoiceSend(options?.voice === true);
         setSent(n => n + 1); setRunning(true);
         setEvents(previous => [...previous,
@@ -56,7 +59,7 @@ function Fixture() {
       <button onClick={() => setEvents(previous => [...previous, { seq: previous.length + 1, type: 'message_update', payload: { assistantMessageEvent: { type: 'thinking_delta', delta: 'Checking the latest build results and comparing the browser state. The next step is to verify the page layout.' } } }])}>Stream thinking</button>
       <span data-testid="voice-send">{String(voiceSend)}</span><span data-testid="sent">{sent}</span><span data-testid="aborted">{aborted}</span><span data-testid="selected">{selected}</span>
       <button onClick={() => { document.querySelector('[data-testid=tracks]')!.textContent = destination.stream.getTracks().map(t => `${t.readyState}:${t.enabled}`).join(','); }}>Check mic tracks</button>
-      <span data-testid="tracks" />
+      <span data-testid="tracks" /><pre data-testid="last-message" hidden>{lastMessage}</pre>
     </aside>
   </>;
 }

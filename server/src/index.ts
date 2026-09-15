@@ -1,3 +1,4 @@
+import { documentsRouter } from "./api/documents.js";
 import { canvasesRouter } from "./api/canvases.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { createServer as createHttpServer } from "node:http";
@@ -564,6 +565,7 @@ app.use("/api", peopleRouter());
 app.use("/api", browserRouter());
 app.use("/api", voiceRouter());
 app.use("/api", terminalRouter());
+app.use("/api", documentsRouter());
 app.use("/api", canvasesRouter());
 // Before the SPA fallback, which answers everything that is not /api.
 mountBrowserProxy(app);

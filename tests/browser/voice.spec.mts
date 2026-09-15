@@ -26,8 +26,14 @@ test('real browser VAD submits turns, supports barge-in, and releases the mic', 
   await page.getByRole('button', { name: 'Turn on hands-free voice' }).click();
   await expect(page.getByRole('button', { name: 'End voice mode' })).toBeVisible({ timeout: 25000 });
   await expect(page.getByRole('status')).toContainText('Listening');
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+  await expect(page.getByText('We can work through it together.')).toBeVisible();
+  await page.getByRole('button', { name: 'Minimize chat' }).click();
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeHidden();
-  await expect(page.getByText('We can work through it together.')).toBeHidden();
+  await page.getByRole('button', { name: 'Check mic tracks' }).click();
+  await expect(page.getByTestId('tracks')).toHaveText('live:true');
+  await page.getByRole('button', { name: 'Show chat' }).click();
+  await expect(page.getByRole('textbox', { name: 'Message' })).toHaveValue('Keep this draft');
   await page.getByTestId('workspace').screenshot({ path: '/tmp/pithagoras-voice-orb.png' });
   await page.getByRole('button', { name: 'Inject speech' }).click();
   await expect(page.getByRole('status')).toContainText('Hearing you');
@@ -281,6 +287,8 @@ test('voice panels animate into browser, terminal and simultaneous layouts', asy
   const mobileBrowser = await page.locator('.voice-browser-window').boundingBox();
   const mobileTerminal = await page.locator('.voice-terminal-window').boundingBox();
   expect(mobileBrowser!.y + mobileBrowser!.height).toBeLessThan(mobileTerminal!.y);
+  expect(mobileBrowser!.height).toBeGreaterThan(70);
+  expect(mobileTerminal!.height).toBeGreaterThan(50);
   expect(await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth)).toBe(false);
   await page.getByRole('button', { name: 'End voice mode' }).click();
   await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();

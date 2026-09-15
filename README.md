@@ -13,7 +13,8 @@ The default configuration uses `Qwen3.6-35B-A3B-4bit`. Its mixture of experts de
 - Automatic discovery of locally registered oMLX models
 - One terminal command: `elara`
 - A normal macOS window that can be minimized
-- A text box and hands free microphone mode in the same conversation
+- A minimizable chat panel beside voice mode, with typed messages and a readable transcript
+- Local PDF, Word (.docx), and text-file attachments for typed or spoken questions
 - A local Chrome browser the agent can inspect and operate
 - An authenticated embedded browser view that does not depend on port 3011
 - Local terminal, file, and canvas tools
@@ -69,7 +70,11 @@ elara model NAME  # switch the current and default model
 elara help
 ```
 
-Type in the composer for text chat. Click the microphone for hands free conversation. Click the model name below the composer to choose from every model registered in oMLX, or use `elara model NAME` in Terminal. The first microphone use may trigger a macOS permission prompt for Google Chrome.
+Type in the composer for text chat. Click the microphone for hands free conversation. The **Conversation** panel stays open while you speak and shows both sides of the conversation. Use its minus button to minimize it and the chat icon to reopen it without stopping the microphone.
+
+Click the paperclip to **Attach documents**, or drop files into the chat panel. After they show **Ready**, ask a question by voice or type it. You can attach up to five files per message, each up to 15 MB. PDF, DOCX, TXT, Markdown, CSV, JSON, YAML, and LOG files are supported. Text is extracted on your Mac. Scanned PDFs need OCR before uploading. Long documents stay available as local text files that Elara can read for follow-up questions.
+
+Click the model name below the composer to choose from every model registered in oMLX, or use `elara model NAME` in Terminal. The first microphone use may trigger a macOS permission prompt for Google Chrome.
 
 ## Local architecture
 

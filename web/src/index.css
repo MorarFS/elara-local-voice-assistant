@@ -332,7 +332,7 @@
 @media (max-width: 600px) { .session-canvases { right: 8px; top: 57px; } .canvas-panel { width: calc(100vw - 72px); height: calc(100dvh - 225px); } }
 
 /* One work panel beside a full orb; two panels above a compact dock. */
-.session-workspace { container-type: inline-size; }
+.session-workspace { container-type: inline-size; container-name: workspace; }
 .canvas-panel { transition: width .7s cubic-bezier(.22,1,.36,1), height .7s cubic-bezier(.22,1,.36,1), transform .7s cubic-bezier(.22,1,.36,1); }
 .session-canvases { transition: top .7s cubic-bezier(.22,1,.36,1), right .7s cubic-bezier(.22,1,.36,1); }
 .session-canvases.is-open .canvas-panel { animation: canvas-enter .65s cubic-bezier(.22,1,.36,1); }
@@ -402,3 +402,47 @@
 .voice-profile p {margin:10px 0;color:rgb(var(--fg-muted));}
 .voice-profile table {width:100%;margin:12px 0;}.voice-profile td{padding:5px 3px;border-bottom:1px solid rgb(var(--line));}.voice-profile td:not(:first-child){text-align:right;white-space:nowrap;}
 .voice-profile pre {white-space:pre-wrap;font-size:10px;max-height:160px;overflow:auto;}.voice-profile button{padding:6px 10px;border:1px solid rgb(var(--line));border-radius:8px;}
+
+/* Conversation stays mounted when minimized so voice keeps its microphone. */
+.session-workspace.is-voice { flex-direction: row; }
+.voice-chat-panel { flex: 0 0 46%; min-width: 340px; max-width: 580px; border-left: 1px solid rgb(var(--line)); background: rgb(var(--surface)); }
+.voice-chat-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 20px; border-bottom: 1px solid rgb(var(--line)); }
+.voice-chat-heading strong { display: block; font-size: 13px; font-weight: 600; }
+.voice-chat-heading span { display: block; margin-top: 3px; font-size: 11px; color: rgb(var(--fg-subtle)); }
+.voice-chat-heading button { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: rgb(var(--fg) / .05); }
+.voice-chat-panel .chat-transcript { overflow-wrap: anywhere; }
+.voice-chat-panel form { padding: 8px 14px 14px; }
+.voice-chat-panel .composer-settings > button:first-child { max-width: 135px; }
+.document-attachments { display: grid; gap: 6px; max-height: 180px; overflow-y: auto; margin-bottom: 8px; }
+.document-attachment { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid rgb(var(--line)); border-radius: 10px; background: rgb(var(--fg) / .025); }
+.document-attachment > svg { flex-shrink: 0; color: rgb(var(--accent)); }
+.document-attachment > div { flex: 1; min-width: 0; }
+.document-attachment span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.document-attachment small { display: block; font-size: 10px; color: rgb(var(--fg-subtle)); }
+.document-attachment button { padding: 6px; border-radius: 6px; }
+.document-attachment button:hover { background: rgb(var(--fg) / .08); }
+.document-attachment.has-error small, .document-error { color: rgb(var(--danger)); }
+.document-error { font-size: 12px; padding: 4px 4px 8px; }
+.document-attachments > p { font-size: 10px; color: rgb(var(--fg-subtle)); padding: 0 4px; }
+@container workspace (max-width: 760px) {
+  .is-voice-chat .voice-area { flex: 0 0 190px; }
+  .is-voice-chat .voice-stage { min-height: 0; }
+  .is-voice-chat .voice-area:has(.voice-stage:not([data-panels="0"])) { flex-basis: min(390px, 50dvh); }
+  .is-voice-chat .voice-area .session-canvases { top: 52px; bottom: 0; }
+  .is-voice-chat .voice-area .canvas-panel { width: calc(100cqw - 32px); height: calc(100% - 140px); }
+  .is-voice-chat .voice-area:has(.voice-stage[data-panels="2"]) .canvas-panel { width: calc(51cqw - 16px); }
+
+  .is-voice-chat .voice-stage-header { padding: 10px 14px; }
+  .is-voice-chat .voice-stage[data-panels="0"] .voice-presence { top: 90px; left: 50%; width: 290px; max-width: 95%; flex-direction: row; gap: 8px; height: 90px; padding: 0; }
+  .is-voice-chat .voice-stage[data-panels="0"] .voice-avatar { width: 94px; flex-shrink: 0; }
+  .is-voice-chat .voice-stage[data-panels="0"] .voice-status { margin: 0; font-size: 11px; }
+  .is-voice-chat .voice-stage[data-panels="0"] .voice-stage-controls { margin: 0; gap: 8px; }
+  .is-voice-chat .voice-stage[data-panels="0"] .voice-stage-action { width: 34px; height: 34px; }
+  .is-voice-chat .voice-stage[data-panels="0"] .voice-live-transcript { position: absolute; top: 84px; left: 0; width: 100%; font-size: 11px; max-height: 38px; overflow: auto; margin: 0; }
+  .is-voice-chat .voice-utilities { bottom: 8px; right: 12px; }
+  .voice-chat-panel { flex: 1; min-width: 0; max-width: none; border-left: 0; border-top: 1px solid rgb(var(--line)); }
+  .voice-chat-heading { padding: 10px 16px; }
+}
+.session-workspace.is-voice-chat.is-compact { flex-direction: column; }
+
+.voice-area { container-type: inline-size; }

@@ -18,3 +18,6 @@ web/public/voice-assets/
 
 playwright-report/
 test-results/
+
+# Private documents attached to local conversations
+.elara-documents/

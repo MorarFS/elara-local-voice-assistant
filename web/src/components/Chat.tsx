@@ -1,3 +1,4 @@
+import { useDocuments, DOCUMENT_ACCEPT } from "../use-documents";
 import { ActivityProgress } from './ActivityProgress';
 import { useWorkPanels } from "../use-work-panels";
 import { CanvasPanel } from "./CanvasPanel";
@@ -6,7 +7,7 @@ import { latestBrowserActivity, latestTerminalActivity } from "../voice-browser"
 import { VoiceControl } from "./VoiceControl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Streamdown, type DiagramPlugin } from "streamdown";
-import { LuGlobe, LuSquareTerminal, LuSquare, LuFileText, LuArrowUp, LuAudioLines } from "react-icons/lu";
+import { LuGlobe, LuSquareTerminal, LuSquare, LuFileText, LuArrowUp, LuAudioLines, LuPaperclip, LuMinus, LuX } from "react-icons/lu";
 import { api, type PiCommand, type PortalEvent, type Session } from "../api";
 import { activity, buildTranscript, type Activity } from "../transcript";
 import { HAS_MERMAID, loadMermaidPlugin } from "../mermaid";
@@ -25,6 +26,7 @@ import { TerminalPanel } from "./TerminalPanel";
  */
 /** Keep in step with what the server attaches — see channels/supervisor.ts. */
 const CONTEXT_BLOCKS: { tag: string; label: string }[] = [
+  { tag: "attached-documents", label: "Documents" },
   { tag: "speaker", label: "Speaker" },
   { tag: "sent-since-you-last-spoke", label: "Sent while idle" },
   { tag: "answer-from-primary", label: "Answer" },
@@ -96,6 +98,18 @@ export function Chat({
 }) {
   const [input, setInput] = useState("");
   const [voiceMode, setVoiceMode] = useState(false);
+  const [chatOpen, setChatOpen] = useState(true);
+  const workspaceElement = useRef<HTMLDivElement>(null);
+  const [compactChat, setCompactChat] = useState(false);
+  useEffect(() => {
+    const element = workspaceElement.current;
+    if (!element) return;
+    const observer = new ResizeObserver(([entry]) => setCompactChat(entry.contentRect.width <= 760));
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const documents = useDocuments(session.id, onSend);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [canvasOpen, setCanvasOpen] = useState(false);
   const [voiceHost, setVoiceHost] = useState<HTMLDivElement | null>(null);
   const [sending, setSending] = useState(false);
@@ -233,11 +247,11 @@ export function Chat({
     // whole replayed conversation is the thing that looked broken on refresh.
     bottomRef.current?.scrollIntoView({ behavior: settled.current ? "smooth" : "auto" });
     settled.current = true;
-  }, [items.length, events.length]);
+  }, [items.length, events.length, chatOpen, voiceMode]);
 
   const send = async () => {
-    const msg = input.trim();
-    if (!msg || sending) return;
+    const msg = input.trim() || (documents.attachments.length ? "Please read the attached documents." : "");
+    if (!msg || sending || documents.uploading) return;
 
     // Some builtins are UI, not prompts: /model opens the picker the pill uses,
     // /settings opens the modal. Sending them to pi would just be a chat line.
@@ -255,16 +269,23 @@ export function Chat({
     setSending(true);
     setInput("");
     try {
-      await onSend(msg, voiceMode ? { voice: true } : undefined);
+      documents.setError("");
+      await documents.send(msg, voiceMode ? { voice: true } : undefined);
+    } catch (error) {
+      setInput(value => value || msg);
+      documents.setError(error instanceof Error ? error.message : "Could not send your message.");
     } finally {
       setSending(false);
     }
   };
 
   return (
-    <div className="session-workspace relative flex h-full min-h-0 flex-col">
-      <CanvasPanel showToggle={false} key={session.id} sessionId={session.id} open={canvasOpen} setOpen={setCanvasOpen}/>
-      <div ref={setVoiceHost} className={voiceMode ? "flex min-h-0 flex-1 flex-col" : "hidden"} />
+    <div ref={workspaceElement} className={`session-workspace relative flex h-full min-h-0 flex-col${voiceMode ? " is-voice" : ""}${voiceMode && chatOpen ? " is-voice-chat" : ""}${compactChat ? " is-compact" : ""}`}>
+
+      <div className={voiceMode ? "voice-area relative flex min-h-0 min-w-0 flex-1 flex-col" : "contents"}>
+        <CanvasPanel showToggle={false} key={session.id} sessionId={session.id} open={canvasOpen} setOpen={setCanvasOpen}/>
+        <div ref={setVoiceHost} className={voiceMode ? "voice-host flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"} />
+      </div>
       <header className={voiceMode ? "hidden" : "border-b border-line px-4 py-3"}>
         <div className="mx-auto flex w-full max-w-3xl items-center gap-3">
         <div className="min-w-0">
@@ -311,9 +332,15 @@ export function Chat({
         </div>
       </header>
 
-      <div className={voiceMode ? "hidden" : "flex min-h-0 flex-1"}>
-      <div className="flex min-w-0 flex-1 flex-col">
-      <div className="flex-1 overflow-y-auto px-4 py-6">
+      <div id="elara-chat" className={voiceMode ? (chatOpen ? "voice-chat-panel flex min-h-0" : "hidden") : "flex min-h-0 flex-1"}
+        onDragOver={e => { if (e.dataTransfer.types.includes("Files")) e.preventDefault(); }}
+        onDrop={e => { if (e.dataTransfer.files.length) { e.preventDefault(); documents.attach(e.dataTransfer.files); } }}>
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {voiceMode && <div className="voice-chat-heading">
+        <div><strong>Conversation</strong><span>Talk, type, or add a document</span></div>
+        <button type="button" aria-label="Minimize chat" title="Minimize chat" onClick={() => setChatOpen(false)}><LuMinus /></button>
+      </div>}
+      <div className="chat-transcript min-h-0 flex-1 overflow-y-auto px-4 py-6" aria-label="Conversation transcript">
         <div className="mx-auto w-full max-w-3xl space-y-3">
         {hasEarlier && (
           <div className="flex justify-center pb-2">
@@ -329,8 +356,8 @@ export function Chat({
 
         {items.length === 0 && (
           <div className="pt-16 text-center">
-            <p className="text-sm text-fg-muted">Give pi a task.</p>
-            <p className="mt-1 text-xs text-fg-faint">You can close this tab — it keeps working.</p>
+            <p className="text-sm text-fg-muted">Talk or type to Elara.</p>
+            <p className="mt-1 text-xs text-fg-faint">Attach a document to discuss it together.</p>
           </div>
         )}
 
@@ -462,6 +489,17 @@ export function Chat({
             ))}
           </div>
         )}
+        <input ref={fileInput} type="file" accept={DOCUMENT_ACCEPT} multiple className="hidden" aria-label="Choose documents"
+          onChange={e => { if (e.target.files) documents.attach(e.target.files); e.target.value = ""; }} />
+        {documents.attachments.length > 0 && <div className="document-attachments" aria-live="polite">
+          {documents.attachments.map(a => <div key={a.key} className={`document-attachment${a.error ? " has-error" : ""}`}>
+            <LuFileText aria-hidden="true" />
+            <div><span title={a.name}>{a.name}</span><small>{a.error || (a.document ? `Ready · ${a.document.characters.toLocaleString()} characters` : "Reading document…")}</small></div>
+            <button type="button" aria-label={`Remove ${a.name}`} title="Remove attachment" onClick={() => documents.remove(a.key)}><LuX /></button>
+          </div>)}
+          <p>Included with your next typed or spoken message.</p>
+        </div>}
+        {documents.error && <p role="alert" className="document-error">{documents.error}</p>}
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -472,7 +510,7 @@ export function Chat({
             }
           }}
           rows={2}
-          placeholder={running ? "pi is working — send to queue a follow-up…" : "Describe the task…"}
+          placeholder={running ? "Send a follow-up…" : voiceMode ? "Type while you talk to Elara…" : "Message Elara…"}
           aria-label="Message"
           className="prompt-input"
         />
@@ -483,10 +521,11 @@ export function Chat({
             panelRequest={panelRequest}
             onPanelConsumed={() => setPanelRequest(null)}
             actions={<>
-              <VoiceControl canvasOpen={canvasOpen} onCanvasMinimize={()=>setCanvasOpen(false)} onCanvasToggle={()=>setCanvasOpen(value=>!value)} key={session.id} sessionId={session.id} items={items} running={running} onSend={onSend} onAbort={onAbort} stageTarget={voiceHost} onModeChange={setVoiceMode} title={session.title} browserAvailable={browserUp} browserActivity={latestBrowserActivity(events)} terminalActivity={latestTerminalActivity(events)} toolEvents={events} />
-              {running && !input.trim() ? <button type="button" aria-label="Stop generation" title="Stop generation" onClick={onAbort} className="prompt-action prompt-stop">
+              <button type="button" className="prompt-action" aria-label="Attach documents" title="Attach documents (PDF, Word, text)" disabled={documents.attachments.length >= 5} onClick={() => fileInput.current?.click()}><LuPaperclip className="h-4 w-4" /></button>
+              <VoiceControl chatOpen={chatOpen} onChatToggle={() => setChatOpen(value => !value)} canvasOpen={canvasOpen} onCanvasMinimize={()=>setCanvasOpen(false)} onCanvasToggle={()=>setCanvasOpen(value=>!value)} key={session.id} sessionId={session.id} items={items} running={running} onSend={documents.send} onAbort={onAbort} stageTarget={voiceHost} onModeChange={setVoiceMode} title={session.title} browserAvailable={browserUp} browserActivity={latestBrowserActivity(events)} terminalActivity={latestTerminalActivity(events)} toolEvents={events} />
+              {running && !input.trim() && !documents.attachments.length ? <button type="button" aria-label="Stop generation" title="Stop generation" onClick={onAbort} className="prompt-action prompt-stop">
                 <LuSquare aria-hidden className="h-4 w-4" fill="currentColor" />
-              </button> : <button type="submit" aria-label="Send message" title={running ? 'Send follow-up' : 'Send message'} disabled={sending || !input.trim()}
+              </button> : <button type="submit" aria-label="Send message" title={running ? 'Send follow-up' : 'Send message'} disabled={sending || documents.uploading || documents.attachments.some(a => !!a.error) || (!input.trim() && !documents.attachments.length)}
                 className="prompt-action prompt-send">
                 <LuArrowUp aria-hidden className="h-5 w-5" />
               </button>}
@@ -499,7 +538,7 @@ export function Chat({
       {/* Beside the conversation rather than above it: the page changing while
           the agent explains what it is doing is the thing worth seeing, and a
           strip across the top pushed the transcript out of view to show it. */}
-      {(watching || terminal) && (
+      {!voiceMode && (watching || terminal) && (
         <>
           <div
             onPointerDown={dragWidth}
