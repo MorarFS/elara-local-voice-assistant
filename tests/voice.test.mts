@@ -176,3 +176,17 @@ test('VAD settings preserve defaults, accept tuning and reject invalid threshold
     assert.throws(() => validateConfig({...settings,vad}));
   }
 });
+
+
+test('Kokoro sends a selected voice and pace as JSON without Breeze reference audio', async () => {
+ const cfg={...settings,runtime:'kokoro',voice:'aria',kokoroVoice:'bf_emma',speechRate:0.95};
+ assert.equal((await fetch(`${base}/voice`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)})).status,200);
+ const spoken=await fetch(`${base}/sessions/test/voice/speech`,{method:'POST',headers:{'Content-Type':'application/json',accept:'audio/pcm'},body:JSON.stringify({text:'A clear spoken reply.'})});
+ assert.equal(spoken.status,200);
+ assert.equal(spoken.headers.get('x-voice-streaming'),null);
+ assert.equal((await spoken.arrayBuffer()).byteLength,4);
+ assert.equal(nativeRequest.model,'kokoro');assert.equal(nativeRequest.voice,'bf_emma');assert.equal(nativeRequest.speed,0.95);
+ assert.equal(nativeRequest.voice_ref,undefined);assert.equal(nativeRequest.reference_text,undefined);
+ assert.throws(()=>validateConfig({...cfg,kokoroVoice:'missing'}));
+ assert.throws(()=>validateConfig({...cfg,speechRate:3}));
+});

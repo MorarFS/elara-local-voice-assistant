@@ -17,7 +17,7 @@ test('settings install progress, ready connection, and stop',async({page})=>{
  await expect(page.getByRole('button',{name:'Start voice',exact:true})).toBeDisabled();
  state='running';
  await expect(page.getByRole('checkbox',{name:'Enable voice controls in sessions'})).toBeChecked({timeout:8000});
- await page.getByRole('button',{name:'Stop · release VRAM'}).click();
+ await page.getByRole('button',{name:'Stop voice services'}).click();
  await expect(page.getByRole('button',{name:'Start voice',exact:true})).toBeEnabled();
  expect(actions).toEqual(['install','stop']);
  await page.screenshot({path:'/tmp/pithagoras-voice-addon.png'});
@@ -39,4 +39,25 @@ test('speech detection settings save and restore defaults',async({page})=>{
  await page.getByRole('button',{name:'Reset speech detection'}).click();
  await expect(silence).toHaveValue('1000');
  await page.screenshot({path:'/tmp/pithagoras-vad-settings.png'});
+});
+
+
+test('native Mac settings expose Kokoro voices and preserve engine settings',async({page})=>{
+ let config:any={enabled:true,native:true,whisperUrl:'http://localhost:8188/inference',breezeUrl:'http://localhost:7863/v1/audio/speech',instruction:'Clear speech',voice:'design',runtime:'kokoro',kokoroVoice:'af_heart',speechRate:1};
+ await page.route('**/api/voice/presets',r=>r.fulfill({json:[]}));
+ await page.route('**/api/voice/install',r=>r.fulfill({json:{available:true,state:'running',busy:false}}));
+ await page.route('**/api/voice',async r=>{if(r.request().method()==='PUT')config=r.request().postDataJSON();await r.fulfill({json:config});});
+ await page.goto('/tests/voice-addon.html');
+ await expect(page.getByLabel('Speaking voice',{exact:true})).toHaveValue('af_heart');
+ await expect(page.getByLabel('Describe the speaking voice')).toHaveCount(0);
+ await page.getByLabel('Speaking voice',{exact:true}).selectOption('bf_emma');
+ await page.getByRole('slider',{name:/Speaking pace/}).fill('0.95');
+ await page.getByRole('button',{name:'Save voice settings'}).click();
+ await expect.poll(()=>config.kokoroVoice).toBe('bf_emma');expect(config.speechRate).toBe(0.95);
+ await page.locator('summary').filter({hasText:'Voice service'}).click();
+ await expect(page.getByText(/NVIDIA Docker host/)).toHaveCount(0);
+ await page.screenshot({path:'/tmp/pithagoras-kokoro-settings.png'});
+ await page.getByLabel('Voice engine',{exact:true}).selectOption('audio-cpp');
+ await expect(page.getByLabel('Describe the speaking voice')).toBeVisible();
+ await expect(page.getByRole('option',{name:'Heart · American, warm',exact:true})).toHaveCount(0);
 });

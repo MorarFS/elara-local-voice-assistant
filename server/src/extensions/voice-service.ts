@@ -1,3 +1,6 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { containerState, dockerAvailable, imagePresent, pullImage, request } from './docker.js';
 
@@ -6,6 +9,18 @@ export const IMAGE = 'nvidia/cuda:12.4.1-devel-ubuntu22.04';
 const VOLUME = 'pithagoras_voice-models';
 export const whisperUrl = 'http://127.0.0.1:8188/inference';
 export const breezeUrl = 'http://127.0.0.1:7862/v1/audio/speech';
+const nativeRoot = process.env.VOICE_NATIVE_DIR;
+const execNative = promisify(execFile);
+async function nativeAction(action: 'start-voice' | 'stop-voice') {
+  if (!nativeRoot) throw new Error('Native voice is not configured');
+  await execNative(process.env.VOICE_NATIVE_PYTHON || '/usr/bin/python3', [path.join(nativeRoot, 'assistant.py'), action], { timeout: 120000 });
+}
+async function nativeStatus() {
+  const readiness = await Promise.all([healthy('http://127.0.0.1:8188/health'), healthy('http://127.0.0.1:7863/health')]);
+  let logs = '';
+  try { logs = (await readFile(path.join(nativeRoot!, 'logs', 'speech.log'), 'utf8')).slice(-4000); } catch {}
+  return { available: true, state: readiness.every(Boolean) ? 'running' : readiness.some(Boolean) ? 'starting' : 'stopped', busy: false, progress: logs, error: '' };
+}
 let pending = false;
 let progress = '';
 let error = '';
@@ -18,6 +33,7 @@ async function healthy(url: string) {
   try { return (await fetch(url, { signal: AbortSignal.timeout(1500) })).ok; } catch { return false; }
 }
 export async function status() {
+  if (nativeRoot) return nativeStatus();
   if (!dockerAvailable()) return { available: false, state: 'unavailable', busy: false, progress: '', error: 'Automatic voice setup requires Docker with NVIDIA GPU support.' };
   const state = await containerState(CONTAINER);
   let logs = '';
@@ -39,6 +55,7 @@ export function containerSpec(script: string) {
       RestartPolicy: { Name: 'no' }, LogConfig: { Type: 'json-file', Config: { 'max-size': '10m', 'max-file': '2' } } } };
 }
 export async function install() {
+  if (nativeRoot) return nativeAction('start-voice');
   if (pending) throw new Error('Voice setup is already in progress');
   if (!dockerAvailable()) throw new Error('Docker is unavailable');
   pending = true; error = ''; progress = 'Preparing voice setup';
@@ -59,17 +76,19 @@ export async function install() {
   })();
 }
 export async function start() {
+  if (nativeRoot) return nativeAction('start-voice');
   if (pending) throw new Error('Voice setup is in progress');
   error = '';
   await checked('POST', `/containers/${CONTAINER}/start`);
 }
 export async function stop() {
+  if (nativeRoot) return nativeAction('stop-voice');
   if (pending) throw new Error('Wait for the image download to finish before stopping');
   await checked('POST', `/containers/${CONTAINER}/stop?t=10`);
   error = '';
 }
 
-const managedModel = {id:'breeze',family:'breeze_tts',path:'/voice/models/breeze-q8_0.gguf',task:'tts',mode:'streaming',session_options:{'breeze_tts.reference_cache_slots':'1'}};
+const managedModel = {id:'breeze',family:'breeze_tts',path:nativeRoot ? path.join(nativeRoot, 'models', 'breeze-tts-2-q8_0.gguf') : '/voice/models/breeze-q8_0.gguf',task:'tts',mode:'streaming',session_options:{'breeze_tts.reference_cache_slots':'1'}};
 export async function modelAction(action:'load'|'unload') {
   const response=await fetch(`http://127.0.0.1:7862/v1/models/${action}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(action==='load'?managedModel:{id:'breeze'}),signal:AbortSignal.timeout(120000)});
   if(!response.ok)throw new Error(`Voice model ${action} failed (${response.status}): ${(await response.text()).slice(0,300)}`);

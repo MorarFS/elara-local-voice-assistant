@@ -689,7 +689,7 @@ const tls =
 
 const server = (tls ? createHttpsServer(tls, app) : createHttpServer(app)).listen(
   PORT,
-  "0.0.0.0",
+  process.env.PORTAL_HOST || "0.0.0.0",
   () => {
   console.log(`pithagoras listening on :${PORT}${tls ? " (https)" : ""}`);
   console.log(`  local bin: ${BIN_DIR}`);

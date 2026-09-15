@@ -4,6 +4,7 @@ import type { Duplex } from "node:stream";
 import type { Express } from "express";
 import { config } from "./extensions/browser-service.js";
 import { viewerConnected, viewerDisconnected } from "./extensions/browser-frames.js";
+import { mountNativeBrowserUi } from "./browser-native-ui.js";
 
 /**
  * The agent's browser, served through the portal.
@@ -23,6 +24,7 @@ import { viewerConnected, viewerDisconnected } from "./extensions/browser-frames
 const UPSTREAM_HOST = process.env.BROWSER_HOST || "127.0.0.1";
 const upstreamPort = () => Number(config().httpsPort);
 const PREFIX = "/browser-ui";
+const nativeUi = process.env.BROWSER_NATIVE_UI === "true";
 
 const auth = () => {
   const { user, password } = config();
@@ -40,6 +42,10 @@ const upstreamPath = (url: string) => url.slice(PREFIX.length) || "/";
  * quietly served the portal's own index.html instead.
  */
 export function mountBrowserProxy(app: Express): void {
+  if (nativeUi) {
+    mountNativeBrowserUi(app, PREFIX);
+    return;
+  }
   app.use(PREFIX, (req, res) => {
     const proxied = https.request(
       {
@@ -70,6 +76,7 @@ export function mountBrowserProxy(app: Express): void {
  * sees an upgrade, so without this the page loads and then sits blank.
  */
 export function attachBrowserUpgrade(server: http.Server): void {
+  if (nativeUi) return;
   server.on("upgrade", (req: http.IncomingMessage, socket: Duplex, head: Buffer) => {
     if (!req.url?.startsWith(PREFIX)) return;
     const proxied = https.request({

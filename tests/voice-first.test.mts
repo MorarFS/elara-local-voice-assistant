@@ -63,3 +63,11 @@ test('unoptimized voice baseline omits voice instructions and the audio marker',
   else process.env.VOICE_RESPONSE_INSTRUCTIONS=previous;
  }
 });
+
+
+test('oMLX receives the non-thinking flag on the first spoken response',()=>{
+ const {turn,handlers,payload}=setup();turn.arm();
+ const result=handlers.get('before_provider_request')!({payload},{model:{provider:'omlx'}});
+ assert.equal(result.chat_template_kwargs.enable_thinking,false);
+ assert.equal(result.chat_template_kwargs.existing,true);
+});

@@ -23,14 +23,19 @@ export function VoiceAddon({ onError }: { onError: (message: string) => void }) 
     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.enabled} onChange={e => update({ enabled: e.target.checked })} />Enable voice controls in sessions</label>
     <section className="rounded-xl border border-line bg-surface/50 p-4 space-y-4">
       <div><h3 className="text-sm font-medium">Your voice</h3><p className="mt-1 text-xs text-fg-muted">Choose how your assistant sounds.</p></div>
-    <VoiceLibrary value={config.voice || "design"} onChange={voice=>update({voice})} onError={onError}/>
-      {["design","aria"].includes(config.voice||"design") && <label className="block text-xs text-fg-muted">Describe the speaking voice<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.instruction} onChange={e=>update({instruction:e.target.value})}/></label>}
+      {config.native && <label className="block text-xs text-fg-muted">Voice engine<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" aria-label="Voice engine" value={config.runtime || 'kokoro'} onChange={e=>update({runtime:e.target.value as 'kokoro'|'audio-cpp',breezeUrl:e.target.value==='kokoro'?'http://127.0.0.1:7863/v1/audio/speech':'http://127.0.0.1:7862/v1/audio/speech'})}><option value="kokoro">Kokoro · natural English, fast</option><option value="audio-cpp">Breeze · expressive, slower</option></select></label>}
+      {config.runtime === 'kokoro' ? <>
+        <label className="block text-xs text-fg-muted">Speaking voice<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" aria-label="Speaking voice" value={config.kokoroVoice || 'af_heart'} onChange={e=>update({kokoroVoice:e.target.value})}><option value="af_heart">Heart · American, warm</option><option value="af_bella">Bella · American, clear</option><option value="bf_emma">Emma · British, feminine</option><option value="am_michael">Michael · American, masculine</option><option value="bm_george">George · British, masculine</option></select></label>
+        <label className="block text-xs text-fg-muted">Speaking pace · {(config.speechRate ?? 1).toFixed(2)}×<input type="range" className="mt-2 w-full" min="0.85" max="1.15" step="0.05" value={config.speechRate ?? 1} onChange={e=>update({speechRate:Number(e.target.value)})}/></label>
+        <p className="text-xs text-fg-faint">Full-precision speech generated on this Mac. These voices speak English.</p>
+      </> : <><VoiceLibrary value={config.voice || "design"} onChange={voice=>update({voice})} onError={onError}/>
+      {["design","aria"].includes(config.voice||"design") && <label className="block text-xs text-fg-muted">Describe the speaking voice<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.instruction} onChange={e=>update({instruction:e.target.value})}/></label>}</>}
     </section>
     <section className="rounded-xl border border-line bg-surface/50 p-4 space-y-4">
       <h3 className="text-sm font-medium">Conversation</h3>
     <label className="block text-xs text-fg-muted">Input language<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.language || "auto"} onChange={e => update({ language: e.target.value })}>{[["auto", "Auto-detect"], ["en", "English"], ["hi", "Hindi"], ["bn", "Bengali"], ["ta", "Tamil"], ["te", "Telugu"], ["mr", "Marathi"], ["gu", "Gujarati"], ["kn", "Kannada"], ["ml", "Malayalam"], ["ur", "Urdu"], ["zh", "Chinese"], ["ja", "Japanese"], ["ko", "Korean"], ["es", "Spanish"], ["fr", "French"], ["de", "German"], ["it", "Italian"], ["pt", "Portuguese"], ["ar", "Arabic"], ["ru", "Russian"]].map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
     <p className="text-xs text-fg-faint">Choosing your language improves recognition on short turns.</p>
-    <label className="block text-xs text-fg-muted">Speech generation<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.cfgScale ?? 4} onChange={e => update({ cfgScale: Number(e.target.value) })}><option value={1}>Fast · lighter voice guidance</option><option value={4}>Expressive · stronger voice guidance</option></select></label>
+    {config.runtime !== 'kokoro' && <label className="block text-xs text-fg-muted">Speech generation<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.cfgScale ?? 4} onChange={e => update({ cfgScale: Number(e.target.value) })}><option value={1}>Fast · lighter voice guidance</option><option value={4}>Expressive · stronger voice guidance</option></select></label>}
     </section>
     <details className="rounded-xl border border-line p-4">
       <summary className="cursor-pointer text-sm font-medium">Speech detection<span className="mt-1 block text-xs font-normal text-fg-muted">Turn timing and microphone sensitivity · Silero VAD</span></summary>
@@ -51,28 +56,28 @@ export function VoiceAddon({ onError }: { onError: (message: string) => void }) 
       </div>
     </details>
     <details className="group rounded-xl border border-line p-4">
-      <summary className="cursor-pointer text-sm font-medium">Voice service <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-normal text-accent">{install?.state === 'absent' ? 'Not installed' : install?.state === 'running' ? 'Ready' : install?.state ?? 'Checking…'}</span><span className="mt-1 block text-xs font-normal text-fg-muted">Installation, GPU memory and service controls</span></summary>
+      <summary className="cursor-pointer text-sm font-medium">Voice service <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-xs font-normal text-accent">{install?.state === 'absent' ? 'Not installed' : install?.state === 'running' ? 'Ready' : install?.state ?? 'Checking…'}</span><span className="mt-1 block text-xs font-normal text-fg-muted">Installation and service controls</span></summary>
     <div className="mt-4 space-y-3">
-      <p className="text-xs text-fg-faint">Install once on your NVIDIA Docker host. Setup downloads and quantizes Breeze, and installs Whisper. Allow 30 GB of disk space during setup.</p>
+      <p className="text-xs text-fg-faint">{config.native ? 'Kokoro and Whisper run locally on your Mac. Breeze is available as an optional expressive voice engine.' : 'Install once on your NVIDIA Docker host. Setup downloads and quantizes Breeze, and installs Whisper. Allow 30 GB of disk space during setup.'}</p>
       <div className="flex gap-2 flex-wrap">
         {install?.available && <button disabled={actionBusy || install.busy || ['starting','running'].includes(install.state)} className="rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent disabled:opacity-40" onClick={()=>manage(install.state==='absent'?'install':'start')}>{install.state==='absent'?'Install voice':install.state==='failed'?'Retry setup':'Start voice'}</button>}
-        {install?.available && ['starting','running'].includes(install.state) && <button disabled={actionBusy} className="rounded-lg border border-line px-3 py-1.5 text-xs" onClick={()=>manage('stop')}>Stop · release VRAM</button>}
+        {install?.available && ['starting','running'].includes(install.state) && <button disabled={actionBusy} className="rounded-lg border border-line px-3 py-1.5 text-xs" onClick={()=>manage('stop')}>Stop voice services</button>}
         {install?.state==='running' && <button disabled={busy} className="rounded-lg bg-accent/12 px-3 py-1.5 text-xs text-accent" onClick={async()=>{setBusy(true);try{setConfig(await api.connectVoice());window.dispatchEvent(new Event('voice-config-changed'));}catch(e){onError((e as Error).message);}finally{setBusy(false);}}}>Use installed voice</button>}
       </div>
       {install?.error && <p role="alert" className="text-xs text-red-400">{install.error}</p>}
       {install?.progress && <details open={install.state==='starting'||install.state==='failed'||install.busy}><summary className="text-xs cursor-pointer text-fg-muted">Setup log</summary><pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-[10px] text-fg-faint" aria-label="Voice setup log">{install.progress}</pre></details>}
-      <p className="text-xs text-fg-faint">Stopping releases GPU memory and keeps your models.</p>
+      <p className="text-xs text-fg-faint">Stopping releases speech-model memory and keeps your downloaded models.</p>
     </div>
-      <div className="mt-4 border-t border-line pt-4 space-y-2">
+      {config.runtime !== 'kokoro' && <div className="mt-4 border-t border-line pt-4 space-y-2">
     <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={config.lazyLoad!==false} onChange={e=>update({lazyLoad:e.target.checked})}/>Lazy load · release GPU memory when voice is idle</label>
     <p className="text-xs text-fg-faint">Load on connection and release memory after the last session ends. Turn off to keep Breeze ready for faster starts.</p>
-      </div>
+      </div>}
     </details>
     <details className="rounded-xl border border-line p-4">
       <summary className="cursor-pointer text-sm font-medium">Advanced connection<span className="mt-1 block text-xs font-normal text-fg-muted">Custom runtime and service addresses</span></summary>
       <div className="mt-4 space-y-4">
-    <label className="block text-xs text-fg-muted">Speech runtime<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.runtime ?? "breeze"} onChange={e => update({ runtime: e.target.value as "breeze" | "audio-cpp" })}><option value="breeze">Breeze Python</option><option value="audio-cpp">Breeze audio.cpp · streaming</option></select></label>
-    {([['whisperUrl', 'Whisper inference URL'], ['breezeUrl', 'Breeze speech URL']] as const).map(([key, label]) => <label key={key} className="block text-xs text-fg-muted">{label}<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config[key]} onChange={e => update({ [key]: e.target.value })} /></label>)}
+    <label className="block text-xs text-fg-muted">Speech runtime<select className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config.runtime ?? "breeze"} onChange={e => update({ runtime: e.target.value as "breeze" | "audio-cpp" | "kokoro" })}><option value="kokoro">Kokoro · natural English</option><option value="breeze">Breeze Python</option><option value="audio-cpp">Breeze audio.cpp · streaming</option></select></label>
+    {([['whisperUrl', 'Whisper inference URL'], ['breezeUrl', 'Speech synthesis URL']] as const).map(([key, label]) => <label key={key} className="block text-xs text-fg-muted">{label}<input className="mt-1.5 w-full rounded-lg border border-line bg-surface px-3 py-2 text-xs" value={config[key]} onChange={e => update({ [key]: e.target.value })} /></label>)}
       </div>
     </details>
     <div className="sticky -bottom-4 z-10 -mx-5 !-mb-4 flex justify-end border-t border-line bg-raised px-5 pt-3 pb-7">

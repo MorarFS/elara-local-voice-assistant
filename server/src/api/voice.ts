@@ -19,7 +19,9 @@ export interface VoiceConfig {
   voice: string;
   language: string;
   cfgScale: number;
-  runtime?: "breeze" | "audio-cpp";
+  runtime?: "breeze" | "audio-cpp" | "kokoro";
+  kokoroVoice?: string;
+  speechRate?: number;
 }
 function config(): VoiceConfig {
   const stored = getStoredSettings() as Record<string, string>;
@@ -49,13 +51,17 @@ export function validateConfig(value: any): VoiceConfig {
   const cfgScale = value.cfgScale ?? 4;
   if (![1, 4].includes(cfgScale)) throw new Error("Choose fast or expressive speech generation");
   const runtime = value.runtime ?? "breeze";
-  if (!["breeze", "audio-cpp"].includes(runtime)) throw new Error("Choose a supported speech runtime");
+  if (!["breeze", "audio-cpp", "kokoro"].includes(runtime)) throw new Error("Choose a supported speech runtime");
+  const kokoroVoice = value.kokoroVoice ?? 'af_heart';
+  if (!['af_heart','af_bella','bf_emma','am_michael','bm_george'].includes(kokoroVoice)) throw new Error('Choose an installed Kokoro voice');
+  const speechRate = value.speechRate ?? 1;
+  if (typeof speechRate !== 'number' || !Number.isFinite(speechRate) || speechRate < 0.85 || speechRate > 1.15) throw new Error('Speech speed must be 0.85–1.15');
   const vad = { ...DEFAULT_VAD, ...value.vad };
   for (const [key, min, max] of [['positiveSpeechThreshold', 0.01, 1], ['negativeSpeechThreshold', 0, 0.99], ['minSpeechMs', 64, 2000], ['preSpeechPadMs', 0, 1000], ['redemptionMs', 200, 3000]] as const) {
     if (typeof vad[key] !== 'number' || !Number.isFinite(vad[key]) || vad[key] < min || vad[key] > max) throw new Error(`Invalid VAD ${key}: expected ${min}–${max}`);
   }
   if (vad.negativeSpeechThreshold >= vad.positiveSpeechThreshold) throw new Error('Speech-end threshold must be lower than speech-start threshold');
-  return { vad, lazyLoad: value.lazyLoad !== false, runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
+  return { kokoroVoice, speechRate, vad, lazyLoad: value.lazyLoad !== false, runtime, voice, language, cfgScale, enabled: value.enabled, whisperUrl: value.whisperUrl.trim(), breezeUrl: value.breezeUrl.trim(), instruction: value.instruction.trim() };
 }
 export function pcmWav(pcm: Buffer): Buffer {
   if (!pcm.length || pcm.length % 2) throw new Error("Breeze returned invalid PCM audio");
@@ -78,9 +84,9 @@ const leaseTimer=setInterval(()=>{void (async()=>{
 })().catch(()=>{});},30000);
 leaseTimer.unref();
 function connectManagedVoice() {
-  const saved = { ...config(), enabled: true, runtime: 'audio-cpp', whisperUrl: voiceService.whisperUrl, breezeUrl: voiceService.breezeUrl };
+  const saved = { ...config(), enabled: true, runtime: process.env.VOICE_NATIVE_DIR ? 'kokoro' : 'audio-cpp', whisperUrl: voiceService.whisperUrl, breezeUrl: process.env.VOICE_NATIVE_DIR ? 'http://127.0.0.1:7863/v1/audio/speech' : voiceService.breezeUrl };
   getDb().prepare("INSERT INTO settings (key, value) VALUES ('voice', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(saved));
-  return {...saved, managed:true};
+  return {...saved, native:Boolean(process.env.VOICE_NATIVE_DIR), managed:saved.runtime === 'audio-cpp'};
 }
 export function voiceRouter(): Router {
   const router = express.Router();
@@ -112,12 +118,12 @@ export function voiceRouter(): Router {
       res.json(connectManagedVoice());
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
-  router.get("/voice", (_req, res) => res.json({...config(),managed:managedVoice(),comparison:process.env.VOICE_COMPARISON === "true",statusSpeech:process.env.VOICE_STATUS_SPEECH !== "false",ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel"}));
+  router.get("/voice", (_req, res) => res.json({...config(),native: Boolean(process.env.VOICE_NATIVE_DIR),managed:managedVoice(),comparison:process.env.VOICE_COMPARISON === "true",statusSpeech:process.env.VOICE_STATUS_SPEECH !== "false",ttsPrefetch:process.env.VOICE_TTS_PREFETCH === "true",sentenceChunks:process.env.VOICE_SENTENCE_CHUNKS === "true",pipelineMode:process.env.VOICE_PIPELINE_MODE === "sequential" ? "sequential" : "parallel"}));
   router.put("/voice", (req, res) => {
     try {
       const saved = validateConfig(req.body);
       getDb().prepare("INSERT INTO settings (key, value) VALUES ('voice', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(JSON.stringify(saved));
-      res.json(saved);
+      res.json({...saved,native:Boolean(process.env.VOICE_NATIVE_DIR),managed:managedVoice()});
     } catch (e) { res.status(400).json({ error: (e as Error).message }); }
   });
   router.use("/sessions/:id/voice", (req, res, next) => {
@@ -162,13 +168,15 @@ export function voiceRouter(): Router {
     if (typeof text !== "string" || !text.trim() || text.length > 600)
       return res.status(400).json({ error: "Speech text must contain 1–600 characters" });
     const settings = config();
+    const jsonRuntime = settings.runtime === 'audio-cpp' || settings.runtime === 'kokoro';
+    const engineName = settings.runtime === 'kokoro' ? 'Kokoro' : 'Breeze';
     const form = new FormData();
     form.set("text", text); form.set("instruction", settings.instruction); form.set("cfg_scale", String(settings.cfgScale));
-    const native: Record<string, unknown> = { model: "breeze", input: text, stream: true, stream_format: "audio", response_format: "pcm", options: { instruction: settings.instruction, guidance_scale: String(settings.cfgScale), seed: "42", stream_frames_per_event: "8", stream_lookahead_margin: "4" } };
+    const native: Record<string, unknown> = { model: settings.runtime === "kokoro" ? "kokoro" : "breeze", ...(settings.runtime === "kokoro" ? {voice: settings.kokoroVoice ?? "af_heart", speed: settings.speechRate ?? 1} : {}), input: text, stream: true, stream_format: "audio", response_format: "pcm", options: { instruction: settings.instruction, guidance_scale: String(settings.cfgScale), seed: "42", stream_frames_per_event: "8", stream_lookahead_margin: "4" } };
     const controller = new AbortController();
     res.on("close", () => controller.abort());
     try {
-      if (!['design','aria'].includes(settings.voice)) {
+      if (settings.runtime !== 'kokoro' && !['design','aria'].includes(settings.voice)) {
         const preset=readVoice(settings.voice);
         form.set('instruction',preset.instruction);
         (native.options as Record<string,string>).instruction=preset.instruction;
@@ -177,7 +185,7 @@ export function voiceRouter(): Router {
           native.voice_ref={type:'base64',data:preset.audio.toString('base64')};native.reference_text=preset.transcript;
         }
       }
-      if (settings.voice === "aria") {
+      if (settings.runtime !== "kokoro" && settings.voice === "aria") {
         const directory = path.join(process.env.DATA_DIR || "./data", "voices");
         const [audio, transcript] = await Promise.all([
           readFile(path.join(directory, "aria.wav")),
@@ -195,13 +203,13 @@ export function voiceRouter(): Router {
       // Keep one browser request pending instead of exposing normal contention.
       do {
         const attemptStarted=performance.now();
-        upstream = await fetch(settings.breezeUrl, { method: "POST", body: settings.runtime === "audio-cpp" ? JSON.stringify(native) : form, headers: settings.runtime === "audio-cpp" ? { "Content-Type": "application/json" } : undefined, redirect: "error", signal });
+        upstream = await fetch(settings.breezeUrl, { method: "POST", body: jsonRuntime ? JSON.stringify(native) : form, headers: jsonRuntime ? { "Content-Type": "application/json" } : undefined, redirect: "error", signal });
         if (upstream.status !== 409) break;
         await upstream.body?.cancel();
         await delay(750, undefined, { signal });
         busyMs+=performance.now()-attemptStarted;
       } while (true);
-      if (!upstream.ok) throw new Error(`Breeze returned HTTP ${upstream.status}`);
+      if (!upstream.ok) throw new Error(`${engineName} returned HTTP ${upstream.status}`);
       if (!upstream.headers.get("content-type")?.startsWith("audio/pcm") && !(settings.runtime === "audio-cpp" && upstream.headers.get("content-type")?.startsWith("application/octet-stream"))) throw new Error("Expected PCM audio from the Breeze API");
       const rate = upstream.headers.get("x-sample-rate");
       if (rate && rate !== "24000") throw new Error(`Unsupported Breeze sample rate: ${rate}`);
