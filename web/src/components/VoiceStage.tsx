@@ -102,6 +102,28 @@ export function VoiceStage({ chatOpen, onChatToggle, workPhase, canvasOpen, onCa
   const [loaded, setLoaded] = useState(false);
   const [terminalUsed, setTerminalUsed] = useState(false);
   const [browserError, setBrowserError] = useState('');
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
+  useEffect(() => {
+    const update = () => setBrowserFullscreen(!!browser.current && document.fullscreenElement === browser.current);
+    document.addEventListener("fullscreenchange", update);
+    update();
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  useEffect(() => {
+    if (!shown && document.fullscreenElement === browser.current) {
+      void document.exitFullscreen().catch(() => setShown(true));
+    }
+  }, [shown]);
+  const toggleBrowserFullscreen = async () => {
+    try {
+      setBrowserError('');
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (browser.current?.requestFullscreen) await browser.current.requestFullscreen();
+      else setBrowserError('Fullscreen is unavailable.');
+    } catch {
+      setBrowserError('Could not change fullscreen. Press Escape to return.');
+    }
+  };
   const thoughtViewport = useRef<HTMLDivElement>(null);
   const thought = useMemo(() => {
     const latest = buildTranscript(toolEvents).at(-1);
@@ -138,7 +160,15 @@ export function VoiceStage({ chatOpen, onChatToggle, workPhase, canvasOpen, onCa
     return () => { cancelled = true; };
   }, [browserActivity, onCue]);
   const open = () => { setLoaded(true); setShown(true); onCue('focus'); };
-  const minimize = () => { setShown(false); end.current?.focus({ preventScroll: true }); };
+  const minimize = async () => {
+    try {
+      if (document.fullscreenElement === browser.current) await document.exitFullscreen();
+      setShown(false);
+      end.current?.focus({ preventScroll: true });
+    } catch {
+      setBrowserError('Could not leave fullscreen. Press Escape to return.');
+    }
+  };
   const input = !muted && phase === "Hearing you";
   const mode: OrbMode = input ? "input" : speaking ? "output" : muted ? "muted" : "idle";
   const status = starting ? "Connecting" : input ? "Hearing you" : speaking ? "Speaking" : phase === "Speaking" ? "Preparing your reply" : phase === "Thinking" ? "Thinking" : phase === "Transcribing" ? "Transcribing" : muted ? "Microphone muted" : "Listening";
@@ -154,9 +184,12 @@ export function VoiceStage({ chatOpen, onChatToggle, workPhase, canvasOpen, onCa
 
       </div>
     </header>
-    <section ref={browser} className="voice-browser-window" aria-label="Live browser" aria-hidden={!shown}>
+    <section ref={browser} className="voice-browser-window" aria-label="Live browser" aria-hidden={!shown}
+      style={browserFullscreen ? { position: "fixed", inset: 0, width: "100vw", height: "100vh", maxWidth: "none", maxHeight: "none", transform: "none", borderRadius: 0 } : undefined}>
       <header><span><i />Live browser</span><div>
-        <button type="button" aria-label="Fullscreen browser" title="Fullscreen" onClick={() => { void browser.current?.requestFullscreen?.().catch(() => setBrowserError('Fullscreen is unavailable.')); }}><LuMaximize2 /></button>
+        <button type="button" aria-label={browserFullscreen ? "Exit fullscreen" : "Fullscreen browser"} title={browserFullscreen ? "Exit fullscreen (Esc)" : "Fullscreen"} aria-pressed={browserFullscreen}
+          style={browserFullscreen ? { width: "auto", display: "flex", gap: 6, padding: "0 10px" } : undefined}
+          onClick={() => { void toggleBrowserFullscreen(); }}>{browserFullscreen ? <><LuMinus /><span>Exit fullscreen</span></> : <LuMaximize2 />}</button>
         <button type="button" aria-label="Minimize browser" title="Minimize browser" onClick={minimize}><LuMinus /></button>
       </div></header>
       {loaded && <iframe src="/browser-ui/" title="The agent's browser" allow="clipboard-read; clipboard-write; fullscreen" />}
