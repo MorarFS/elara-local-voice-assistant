@@ -121,6 +121,30 @@ export function Chat({
   const [terminal, setTerminal] = useState(false);
   useWorkPanels(!voiceMode && watching, !voiceMode && terminal, canvasOpen, panel => { if(panel === "browser") setWatching(false); else if(panel === "terminal") setTerminal(false); else setCanvasOpen(false); });
   const browserPane = useRef<HTMLDivElement>(null);
+  const [browserFullscreen, setBrowserFullscreen] = useState(false);
+  useEffect(() => {
+    const update = () => setBrowserFullscreen(!!browserPane.current && document.fullscreenElement === browserPane.current);
+    document.addEventListener("fullscreenchange", update);
+    update();
+    return () => document.removeEventListener("fullscreenchange", update);
+  }, []);
+  const toggleBrowserFullscreen = async () => {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else if (browserPane.current?.requestFullscreen) await browserPane.current.requestFullscreen();
+      else documents.setError("Fullscreen is unavailable.");
+    } catch {
+      documents.setError("Could not change fullscreen. Press Escape to return.");
+    }
+  };
+  const collapseBrowser = async () => {
+    try {
+      if (document.fullscreenElement === browserPane.current) await document.exitFullscreen();
+      setWatching(false);
+    } catch {
+      documents.setError("Could not leave fullscreen. Press Escape to return.");
+    }
+  };
 
   // Kept across reloads: a width you dragged is a preference, and losing it on
   // every refresh makes the handle feel decorative.
@@ -558,13 +582,14 @@ export function Chat({
                 <div className="flex items-center gap-2 border-b border-line bg-surface px-3 py-1.5">
                   <span className="text-[11px] text-fg-subtle">Browser</span>
                   <button
-                    onClick={() => browserPane.current?.requestFullscreen?.()}
+                    onClick={() => { void toggleBrowserFullscreen(); }}
+                    aria-pressed={browserFullscreen}
                     className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
                   >
-                    Fullscreen
+                    {browserFullscreen ? "Exit fullscreen" : "Fullscreen"}
                   </button>
                   <button
-                    onClick={() => setWatching(false)}
+                    onClick={() => { void collapseBrowser(); }}
                     title="Collapse"
                     className="rounded px-1.5 py-0.5 text-[11px] text-fg-faint transition hover:text-fg"
                   >
