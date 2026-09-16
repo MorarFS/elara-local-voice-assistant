@@ -14,6 +14,28 @@ import { LiveTranscription } from "../live-transcription";
 import { preparePcmSpeech, readPcmStream, playAudioBuffer } from "../pcm-stream";
 import { samplesWav } from "../voice";
 import { HandsFreeVoice, type VoicePhase } from "../hands-free";
+import { AudioInputPicker, type AudioInput } from './AudioInputPicker';
+
+const inputStorageKey = 'voiceInputDevice';
+const defaultInput: AudioInput = { deviceId: '', label: 'Browser default' };
+function savedInput(): AudioInput {
+  try {
+    const value = JSON.parse(localStorage.getItem(inputStorageKey) || 'null');
+    if (typeof value?.deviceId === 'string' && typeof value?.label === 'string') return value;
+  } catch {}
+  return defaultInput;
+}
+function openMicrophone(deviceId: string) {
+  return navigator.mediaDevices.getUserMedia({ audio: {
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+    channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+  } });
+}
+function inputFailure(error: unknown): string {
+  if (error instanceof DOMException && ['NotFoundError', 'OverconstrainedError'].includes(error.name))
+    return 'That microphone is unavailable. Reconnect it or choose another audio input.';
+  return error instanceof Error ? error.message : 'Could not open the microphone.';
+}
 
 export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinimize, onCanvasToggle, sessionId, items, running, onSend, onAbort, stageTarget, onModeChange, title, browserAvailable, browserActivity, terminalActivity, toolEvents }: {
   sessionId: string;
@@ -86,6 +108,101 @@ export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinim
   const [sequentialMode, setSequentialMode] = useState(false);
   const context = useRef<AudioContext | null>(null);
   const stream = useRef<MediaStream | null>(null);
+  const [audioInputs, setAudioInputs] = useState<AudioInput[]>([]);
+  const [selectedInput, setSelectedInput] = useState(savedInput);
+  const [activeInput, setActiveInput] = useState('');
+  const [inputError, setInputError] = useState('');
+  const [inputBusy, setInputBusy] = useState(false);
+  const changingInput = useRef(false);
+  const refreshInputs = useCallback(async () => {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (mounted.current) setAudioInputs(devices.filter(device => device.kind === 'audioinput' && device.deviceId).map(({ deviceId, label }) => ({ deviceId, label })));
+    } catch (error) { if (mounted.current) setInputError(inputFailure(error)); }
+  }, []);
+  useEffect(() => {
+    void refreshInputs();
+    navigator.mediaDevices?.addEventListener('devicechange', refreshInputs);
+    return () => navigator.mediaDevices?.removeEventListener('devicechange', refreshInputs);
+  }, [refreshInputs]);
+  const rememberInput = (input: AudioInput) => {
+    setSelectedInput(input);
+    try { localStorage.setItem(inputStorageKey, JSON.stringify(input)); } catch {}
+  };
+  const watchMicrophone = (mic: MediaStream, version: number) => {
+    setActiveInput(mic.getAudioTracks()[0]?.label || 'Microphone');
+    for (const track of mic.getTracks()) track.onended = () => {
+      if (mounted.current && epoch.current === version && stream.current === mic) {
+        setError('Microphone disconnected. Reconnect it or choose another audio input.'); stop();
+      }
+    };
+  };
+  const selectInput = async (input: AudioInput) => {
+    if (starting || changingInput.current || muteBusy.current) return;
+    setInputError('');
+    const detector = vad.current;
+    const previous = stream.current;
+    if (!detector || !previous) { rememberInput(input); setError(''); return; }
+    const version = epoch.current;
+    const current = () => mounted.current && epoch.current === version;
+    const wasMuted = mutedRef.current;
+    changingInput.current = true; muteBusy.current = true; setInputBusy(true);
+    let replacement: MediaStream | undefined;
+    let paused = false;
+    try {
+      replacement = await openMicrophone(input.deviceId);
+      if (!current()) { replacement.getTracks().forEach(track => track.stop()); return; }
+      detector.setOptions({ submitUserSpeechOnPause: false });
+      await detector.pause();
+      paused = true;
+      if (!current()) { replacement.getTracks().forEach(track => track.stop()); return; }
+      clearTimeout(maxTurn.current);
+      transcription.current?.reset(); setTranscript(''); levels.current.input = 0;
+      voice.current?.setMuted(true);
+      replacement.getTracks().forEach(track => { track.enabled = !wasMuted; });
+      stream.current = replacement;
+      if (!wasMuted) { await context.current?.resume(); await detector.start(); }
+      if (!current()) { replacement.getTracks().forEach(track => track.stop()); return; }
+      watchMicrophone(replacement, version);
+      previous.getTracks().forEach(track => track.stop());
+      rememberInput(input); setError('');
+      void refreshInputs();
+    } catch (error) {
+      if (current()) {
+        if (paused) {
+          try {
+            await detector.pause();
+            stream.current = previous;
+            if (!wasMuted) await detector.start();
+          } catch { setError('Could not reconnect the microphone. Turn voice on again.'); stop(); }
+        }
+        setInputError(inputFailure(error));
+      }
+      replacement?.getTracks().forEach(track => track.stop());
+    } finally {
+      if (current()) {
+        detector.setOptions({ submitUserSpeechOnPause: !wasMuted });
+        voice.current?.setMuted(wasMuted);
+      } else previous.getTracks().forEach(track => track.stop());
+      changingInput.current = false; muteBusy.current = false;
+      if (mounted.current) setInputBusy(false);
+    }
+  };
+  const revealInputs = async () => {
+    if (starting || changingInput.current) return;
+    setInputError('');
+    if (audioInputs.some(device => device.label) || stream.current) { await refreshInputs(); return; }
+    changingInput.current = true; setInputBusy(true);
+    let permissionStream: MediaStream | undefined;
+    try { permissionStream = await openMicrophone(''); await refreshInputs(); }
+    catch (error) { if (mounted.current) setInputError(inputFailure(error)); }
+    finally {
+      permissionStream?.getTracks().forEach(track => track.stop());
+      changingInput.current = false;
+      if (mounted.current) setInputBusy(false);
+    }
+  };
   const managed = useRef(false);
   const connection = useRef<string | null>(null);
   const heartbeat = useRef<ReturnType<typeof setInterval>>();
@@ -113,7 +230,7 @@ export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinim
     stream.current?.getTracks().forEach(track => track.stop()); stream.current = null;
     const audio = context.current; context.current = null;
     if (audio && audio.state !== "closed") void audio.close();
-    if (mounted.current) { setEnabled(false); setStarting(false); setMuted(false); setSpeaking(false); setTranscript(""); }
+    if (mounted.current) { setEnabled(false); setStarting(false); setMuted(false); setSpeaking(false); setTranscript(""); setActiveInput(''); }
   };
   useEffect(() => {
     mounted.current = true;
@@ -248,10 +365,11 @@ export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinim
     return Object.assign(play, { completed: stream?.completed });
   };
   const start = async () => {
+    if (changingInput.current) return;
     if (voice.current || starting) { stop(); return; }
     const version = ++epoch.current;
     const current = () => mounted.current && epoch.current === version;
-    setStarting(true); setError(""); setMuted(false); mutedRef.current = false;
+    setStarting(true); setError(""); setInputError(''); setMuted(false); mutedRef.current = false;
     try {
       if (!window.isSecureContext || !navigator.mediaDevices?.getUserMedia)
         throw new Error("Microphone access requires HTTPS or localhost.");
@@ -261,11 +379,11 @@ export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinim
       const audio = new AudioContext(); context.current = audio;
       await audio.resume();
       if (!current()) return;
-      const mic = await navigator.mediaDevices.getUserMedia({ audio: {
-        channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true,
-      } });
+      const mic = await openMicrophone(selectedInput.deviceId);
       if (!current()) { mic.getTracks().forEach(track => track.stop()); return; }
       stream.current = mic;
+      watchMicrophone(mic, version);
+      void refreshInputs();
       if(managed.current){
         const lease=crypto.randomUUID();connection.current=lease;
         await connectVoice(lease,true);
@@ -308,7 +426,7 @@ export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinim
         ortConfig: ort => { ort.env.wasm.numThreads = 1; },
         getStream: async () => mic,
         pauseStream: async () => {},
-        resumeStream: async () => mic,
+        resumeStream: async () => stream.current!,
         ...vadSettings.current,
         submitUserSpeechOnPause: true,
         onSpeechStart: () => { if (current() && !mutedRef.current && !latest.current.compacting) {if(profiling.current)profiler.current!.begin();live.begin();} },
@@ -338,27 +456,28 @@ export function VoiceControl({ chatOpen, onChatToggle, canvasOpen, onCanvasMinim
       });
       if (!current()) { await detector.destroy(); return; }
       vad.current = detector;
-      for (const track of mic.getTracks()) track.onended = () => {
-        if (current()) { setError("Microphone disconnected. Reconnect it and turn the mic on again."); stop(); }
-      };
       await detector.start();
       if (!current()) return;
       setEnabled(true); setStarting(false); cue("start");
     } catch (e) {
-      if (current()) { setError((e as Error).message); stop(); }
+      if (current()) { setError(inputFailure(e)); stop(); }
     }
   };
 
   if (!available) return null;
+  const inputPicker = <AudioInputPicker devices={audioInputs} selected={selectedInput} activeLabel={activeInput}
+    busy={starting || inputBusy} error={inputError} levels={enabled ? levels : undefined}
+    onSelect={input => { void selectInput(input); }} onRefresh={() => { void revealInputs(); }} />;
   return <>
     {profileOpen&&createPortal(<VoiceProfile profiler={profiler.current!} onClose={()=>{setProfileOpen(false);profiler.current!.close('disabled');}}/>,document.body)}
 
     {(starting || enabled) && stageTarget && createPortal(
       <VoiceStage chatOpen={chatOpen} onChatToggle={onChatToggle} workPhase={running ? activity(toolEvents) : null} canvasOpen={canvasOpen} onCanvasMinimize={onCanvasMinimize} onCanvasToggle={onCanvasToggle} title={sequentialMode ? `${title} · ${sentenceMode ? (prefetchMode ? "Sentence pipeline · buffered audio" : "Sentence chunks · buffered audio") : "Sequential baseline"}` : comparison ? `${title} · Streaming pipeline` : title} phase={phase} starting={starting} muted={muted} speaking={speaking}
         browserAvailable={browserAvailable} browserActivity={browserActivity} terminalActivity={terminalActivity} toolEvents={toolEvents} sounds={sounds} onSounds={toggleSounds} onCue={cue}
-        levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} />, stageTarget,
+        levels={levels} transcript={transcript} error={error} onMute={toggleMute} onEnd={endMode} audioInput={inputPicker} />, stageTarget,
     )}
     <div className="relative flex items-center gap-1">
+      {!starting && !enabled && inputPicker}
       <button type="button" className="prompt-action" aria-label="Profile voice latency" title="Profile voice latency" aria-pressed={profileOpen} onClick={()=>{setProfileOpen(v=>!v);if(profileOpen)profiler.current!.close('disabled');}}><LuGauge/></button>
       {error && !enabled && !starting && <p role="alert" className="absolute bottom-full right-0 mb-3 w-64 rounded-xl border border-line bg-surface p-3 text-xs text-danger shadow-pop">{error}</p>}
       <button ref={startButton} type="button" onClick={start} aria-label="Turn on hands-free voice" title="Start voice conversation" className="prompt-action">

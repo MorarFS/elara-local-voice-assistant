@@ -86,7 +86,8 @@ function VoiceOrb({ mode, levels }: { mode: OrbMode; levels: MutableRefObject<Vo
   return <canvas ref={canvas} aria-hidden="true" className="voice-orb" data-mode={mode} />;
 }
 
-export function VoiceStage({ chatOpen, onChatToggle, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue }: {
+export function VoiceStage({ chatOpen, onChatToggle, workPhase, canvasOpen, onCanvasMinimize, onCanvasToggle, title, phase, starting, muted, speaking, levels, error, transcript, onMute, onEnd, browserAvailable, browserActivity, terminalActivity, toolEvents, sounds, onSounds, onCue, audioInput }: {
+  audioInput: React.ReactNode;
   workPhase?: Activity | null;
   chatOpen: boolean; onChatToggle: () => void;
   canvasOpen: boolean; onCanvasMinimize: () => void; onCanvasToggle: () => void;
@@ -176,6 +177,7 @@ export function VoiceStage({ chatOpen, onChatToggle, workPhase, canvasOpen, onCa
     <header className="voice-stage-header">
       <span className="voice-stage-session">{title}</span>
       <div className="voice-utilities">
+        {audioInput}
         <button type="button" aria-label={chatOpen ? "Hide chat" : "Show chat"} title={chatOpen ? "Hide chat" : "Show chat"} aria-expanded={chatOpen} aria-controls="elara-chat" onClick={onChatToggle}><LuMessageSquare /></button>
         <button type="button" onClick={onCanvasToggle} title="Session canvases" aria-label="Session canvases" aria-expanded={canvasOpen}><LuFileText /></button>
         {(browserAvailable || loaded) && !shown && <button type="button" onClick={open} title="Show browser" aria-label="Show browser"><LuGlobe /></button>}
