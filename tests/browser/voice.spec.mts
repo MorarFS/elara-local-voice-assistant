@@ -360,3 +360,45 @@ test('composer switches stop to send for a follow-up and canvas lives in the hea
  await expect(page.locator('.session-workspace > header').getByRole('button',{name:'Session canvases',exact:true})).toBeVisible();
  await expect(page.locator('.canvas-toggle')).toHaveCount(0);
 });
+
+test('browser fullscreen can be exited, reopened, and minimized in voice mode', async ({ page }) => {
+  await page.route('**/api/voice', route => route.fulfill({ json: { enabled: true } }));
+  await page.route('**/api/browser', route => route.fulfill({ json: { install: { container: 'running' } } }));
+  await page.route('**/browser-ui/', route => route.fulfill({ contentType: 'text/html', body: '<p>Local browser preview</p>' }));
+  await page.goto('/tests/voice.html');
+  await page.getByRole('button', { name: 'Turn on hands-free voice' }).click();
+  await expect(page.getByRole('status')).toHaveText('Listening', { timeout: 25000 });
+  await page.getByRole('button', { name: 'Show browser', exact: true }).click();
+  const enlarge = page.getByRole('button', { name: 'Fullscreen browser', exact: true });
+  const restore = page.getByRole('button', { name: 'Exit fullscreen', exact: true });
+  await enlarge.click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement?.classList.contains('voice-browser-window'))).toBe(true);
+  await expect(restore).toBeVisible();
+  await expect(page.getByLabel('Live browser', { exact: true })).toHaveCSS('transform', 'none');
+  await restore.click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await expect(enlarge).toBeVisible();
+  await enlarge.click();
+  // A browser-initiated exit, such as Escape, must also reset the toolbar.
+  await page.evaluate(() => document.exitFullscreen());
+  await expect(enlarge).toBeVisible();
+  await enlarge.click();
+  await page.getByRole('button', { name: 'Minimize browser', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await expect(page.getByRole('button', { name: 'Show browser', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Check mic tracks' }).click();
+  await expect(page.getByTestId('tracks')).toHaveText('live:true');
+  await page.getByRole('button', { name: 'End voice mode' }).click();
+});
+
+test('the text-chat browser fullscreen button returns to the conversation', async ({ page }) => {
+  await page.route('**/api/browser', route => route.fulfill({ json: { install: { container: 'running' } } }));
+  await page.route('**/browser-ui/', route => route.fulfill({ contentType: 'text/html', body: '<p>Local browser preview</p>' }));
+  await page.goto('/tests/voice.html');
+  await page.getByTitle('Watch the browser the agent is driving', { exact: true }).click();
+  await page.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Exit fullscreen', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => document.fullscreenElement === null)).toBe(true);
+  await expect(page.getByRole('textbox', { name: 'Message' })).toBeVisible();
+});

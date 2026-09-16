@@ -7,8 +7,18 @@ import type { PortalEvent, Session } from '../src/api';
 import '../src/index.css';
 const microphone = new AudioContext();
 let destination = microphone.createMediaStreamDestination();
-Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async () => {
-  if (destination.stream.getTracks().every(t => t.readyState === 'ended')) destination = microphone.createMediaStreamDestination();
+const microphoneTest = (window as any).microphoneTest = { requests: [] as MediaStreamConstraints[], streams: [] as MediaStream[], failDevice: '', delayDevice: '', release: () => {} };
+let inputId = '';
+Object.defineProperty(navigator.mediaDevices, 'getUserMedia', { value: async (constraints: MediaStreamConstraints) => {
+  microphoneTest.requests.push(constraints);
+  const choice = typeof constraints.audio === 'object' ? constraints.audio.deviceId : undefined;
+  const id = typeof choice === 'object' && 'exact' in choice ? String(choice.exact) : '';
+  if (id && id === microphoneTest.failDevice) throw new DOMException('Device not found', 'NotFoundError');
+  if (id && id === microphoneTest.delayDevice) await new Promise<void>(resolve => { microphoneTest.release = resolve; });
+  if (inputId !== id || destination.stream.getTracks().every(t => t.readyState === 'ended')) destination = microphone.createMediaStreamDestination();
+  inputId = id;
+  if (!microphoneTest.streams.includes(destination.stream)) microphoneTest.streams.push(destination.stream);
+  for (const track of destination.stream.getTracks()) Object.defineProperty(track, 'label', { configurable: true, value: id === 'insta360' ? 'Insta360 microphone' : 'MacBook microphone' });
   return destination.stream;
 } });
 function Fixture() {
